@@ -248,7 +248,12 @@ export async function handleUtterance(
     asides.push("I need the number said out loud for that one.");
   }
 
-  for (const call of u.calls) {
+  // "Undo that" reverses the whole previous sentence. A sentence can hold several actions,
+  // so after one is undone we look again and keep going while the next belongs to the same run.
+  const queue: PlannedCall[] = [...u.calls];
+  let undoRun: string | null = null;
+  for (let qi = 0; qi < queue.length; qi++) {
+    const call = queue[qi];
     if (call.tool === "ask_clarification") {
       await ledger.auditEvent(db, {
         event: "clarification.asked",
@@ -298,7 +303,9 @@ export async function handleUtterance(
     let original: ActionDoc | null = null;
     if (call.tool === "undo") {
       original = await ledger.findLastUndoable(db);
+      if (original && undoRun && original.run_id !== undoRun) continue; // the rest belongs to an earlier sentence
       if (!original) {
+        if (undoRun) continue; // only looking for more of the same sentence
         step({ key: "note", label: "Nothing to undo", status: "info" });
         asides.push("There's nothing to undo.");
         continue;
@@ -386,9 +393,12 @@ export async function handleUtterance(
       item_id: params.item_id ?? null,
     });
     if (final.status === "verified") {
-      done.push(
-        original ? describeUndo(original, item) : describe(type, params, item),
-      );
+      const undone = original ? describeUndo(original, item) : "";
+      done.push(original ? (undoRun ? undone.replace(/^Undone\. /, "") : undone) : describe(type, params, item));
+      if (original && queue.length < 12) {
+        undoRun = original.run_id;
+        queue.push({ tool: "undo" }); // look for another action from the same sentence
+      }
     } else if (final.status === "halted") {
       halted = true;
       step({
