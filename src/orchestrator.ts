@@ -50,6 +50,23 @@ function describe(
   }
 }
 
+/** What an undo put back, in words. */
+function describeUndo(original: ActionDoc, item: MenuItem | null | undefined): string {
+  const name = item?.name_en ?? "that item";
+  switch (original.type) {
+    case "start_promo":
+      return `Undone. The ${name.toLowerCase()} promo is off`;
+    case "set_price":
+      return `Undone. ${name} is back to its previous price`;
+    case "mark_sold_out":
+      return `Undone. ${plural(item)} are back on the menu`;
+    case "mark_available":
+      return `Undone. ${plural(item)} are sold out again`;
+    default:
+      return "Undone";
+  }
+}
+
 function summary(call: PlannedCall, menu: MenuItem[]): string {
   const item =
     "item_id" in call && call.item_id
@@ -79,7 +96,7 @@ async function run(
   action: ActionDoc,
   step: (s: TraceStep) => void,
 ): Promise<ActionDoc> {
-  const slowMs = env.DEMO_SLOW === "1" ? 2000 : 0;
+  const slowMs = Number((env as any).slowMs ?? 0) || (env.DEMO_SLOW === "1" ? 2000 : 0);
   return ledger.publish(db, action._id, { slowMs, onStep: (s) => step(s) });
 }
 
@@ -90,8 +107,16 @@ export async function handleUtterance(
   emit: Emit,
 ): Promise<UtteranceResult> {
   const run_id = id("run");
+  const t0 = Date.now();
+  const lap = (label: string) => console.log(`[timing] ${label} +${Date.now() - t0}ms`);
   const text = (input.text ?? "").trim();
-  const identity = await ledger.getIdentity(db, input.human_id);
+  // One parallel read: who is speaking, the kill switch, the menu and the active rules.
+  const [identity, haltedNow, menu, rules] = await Promise.all([
+    ledger.getIdentity(db, input.human_id),
+    ledger.isHalted(db),
+    ledger.loadMenu(db),
+    ledger.loadRules(db),
+  ]);
   if (
     !identity ||
     identity.kind !== "human" ||
@@ -136,7 +161,7 @@ export async function handleUtterance(
   if (!text) return finish("I didn't hear anything, chef.", []);
 
   // The kill switch is read from Atlas on every request.
-  if (await ledger.isHalted(db)) {
+  if (haltedNow) {
     await ledger.auditEvent(db, {
       event: "halt.refused",
       run_id,
@@ -154,11 +179,9 @@ export async function handleUtterance(
     );
   }
 
-  const [menu, rules] = await Promise.all([
-    ledger.loadMenu(db),
-    ledger.loadRules(db),
-  ]);
+  lap("identity+halt+menu+rules");
   const u = await understand(env, { transcript: text, menu, role });
+  lap(`understand (extract ${u.timings.extract_ms}ms, plan ${u.timings.plan_ms}ms)`);
 
   const quoted = u.evidence
     .filter((e) => e.value !== null && e.quote)
@@ -264,7 +287,10 @@ export async function handleUtterance(
     }
     const item = menu.find((m) => m._id === params.item_id) ?? null;
 
-    const proposed = await ledger.proposeAction(db, {
+    // The gate is pure code: it sees the request, the speaker's role and the rules from Atlas.
+    // The request and the verdict are then written together, before anything touches a target.
+    const decision = evaluate({ type, params, actor, item, rules, original });
+    const judged = await ledger.proposeDecided(db, {
       run_id,
       type,
       actor,
@@ -272,10 +298,9 @@ export async function handleUtterance(
       evidence: u.evidence,
       params,
       undo_of: original?._id ?? null,
+      decision,
     });
-
-    const decision = evaluate({ type, params, actor, item, rules, original });
-    const judged = await ledger.recordDecision(db, proposed._id, decision);
+    lap(`proposeDecided ${type}`);
     const what = original
       ? `undo of “${describe(original.type, original.params, item)}”`
       : summary(call, menu);
@@ -325,6 +350,7 @@ export async function handleUtterance(
       detail: `${cite} · ${decision.reason}`,
     });
     const final = await run(db, env, judged, step);
+    lap(`publish ${type} -> ${final.status}`);
     results.push({
       action_id: final._id,
       type,
@@ -339,9 +365,7 @@ export async function handleUtterance(
         status: "ok",
       });
       done.push(
-        original
-          ? `Undone. ${describe(original.type, original.params, item)} is reversed`
-          : describe(type, params, item),
+        original ? describeUndo(original, item) : describe(type, params, item),
       );
     } else if (final.status === "halted") {
       halted = true;

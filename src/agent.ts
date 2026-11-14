@@ -78,8 +78,91 @@ export class YesChefAgent extends Agent<Env, ShopState> {
     }
   }
 
-  async onAtlasChange(_change: { ns: { coll: string }; operationType: string }) {
-    await this.refresh();
+  async onAtlasChange(change: any) {
+    this.queueRefresh();
+    const coll: string = change?.ns?.coll ?? "";
+    if (coll.startsWith("target_")) await this.guardTarget(coll, change);
+  }
+
+  #expectedReverts = new Set<string>();
+
+  /**
+   * Bypass watcher. Every legitimate write to a target carries a new action_id.
+   * A change that keeps the same action_id and timestamp but alters what customers see was made
+   * outside the agent (for example by hand in Atlas): put the previous state back and record it.
+   */
+  async guardTarget(coll: string, change: any) {
+    const op = change.operationType;
+    const before = change.fullDocumentBeforeChange;
+    const after = change.fullDocument;
+    const key = `${coll}/${String(change.documentKey?._id)}`;
+    if (this.#expectedReverts.delete(key)) return; // our own restoring write
+    if (!before) return;
+    const FIELDS = ["text_en", "text_fr", "price", "sold_out", "promo_en", "promo_fr", "ends_at", "available", "discount_pct"];
+    if (op !== "update" && op !== "replace") return; // inserts and deletes are the seed script's reset
+    const changed = FIELDS.filter((f) => JSON.stringify(before[f] ?? null) !== JSON.stringify(after?.[f] ?? null));
+    if (!changed.length) return;
+    // A real write (publish, undo, restore, seed) changes action_id or updated_at. A hand edit changes neither.
+    if (after?.action_id !== before.action_id) return;
+    if (String(after?.updated_at) !== String(before.updated_at)) return;
+
+    const db = this.db();
+    this.#expectedReverts.add(key);
+    await db.collection(coll).replaceOne({ _id: before._id }, before, { upsert: true });
+    const system = coll.replace("target_", "");
+    const detail = {
+      target: system,
+      item_id: String(before._id),
+      fields: changed,
+      attempted: Object.fromEntries(changed.map((f) => [f, after?.[f] ?? null])),
+      restored: Object.fromEntries(changed.map((f) => [f, before[f] ?? null])),
+      last_action_id: before.action_id,
+    };
+    const actor = { human_id: "unknown", role: "none", agent_id: AGENT_ID } as any;
+    await ledger.auditEvent(db, { event: "drift.detected", action_id: before.action_id === "seed" ? null : before.action_id, actor, detail });
+    await ledger.auditEvent(db, { event: "drift.reverted", action_id: before.action_id === "seed" ? null : before.action_id, actor, detail });
+    this.#emit({
+      run_id: `drift_${Date.now().toString(36)}`,
+      speaker: "Atlas",
+      role: "owner",
+      text: `Direct edit to the ${system} (${changed.join(", ")}) with no action behind it`,
+      steps: [
+        { key: "note", label: `Change stream saw an edit to the ${system} with no action`, status: "blocked", detail: `${String(before._id)} · ${changed.join(", ")}` },
+        { key: "target", label: `Restored the ${system} from the database's own before-image`, status: "ok" },
+        { key: "note", label: "Recorded drift.detected and drift.reverted in the audit log", status: "info" },
+      ],
+      say: `Someone changed the ${system} directly, chef. No rule allowed it, so I put it back.`,
+      done: true,
+    });
+    this.queueRefresh();
+  }
+
+  #refreshTimer?: ReturnType<typeof setTimeout>;
+  #refreshing = false;
+  #dirty = false;
+
+  /** Coalesce bursts of changes into one snapshot read, so a publish does not flood the database. */
+  queueRefresh() {
+    if (this.#refreshing) {
+      this.#dirty = true;
+      return;
+    }
+    if (this.#refreshTimer) return;
+    this.#refreshTimer = setTimeout(async () => {
+      this.#refreshTimer = undefined;
+      this.#refreshing = true;
+      try {
+        await this.refresh();
+      } catch (err) {
+        console.error("refresh failed", err);
+      } finally {
+        this.#refreshing = false;
+        if (this.#dirty) {
+          this.#dirty = false;
+          this.queueRefresh();
+        }
+      }
+    }, 60);
   }
 
   /** Rebuild the snapshot from Atlas and push it to every screen. */
@@ -96,14 +179,14 @@ export class YesChefAgent extends Agent<Env, ShopState> {
 
   /** One spoken or typed sentence. */
   async utterance(input: { human_id: string; text: string; stt: "elevenlabs" | "typed" }) {
-    const out = await handleUtterance(this.db(), this.env, input, this.#emit);
+    const out = await handleUtterance(this.db(), await this.#runEnv(), input, this.#emit);
     await this.refresh();
     return out;
   }
 
   /** The owner's answer to a held request. */
   async approve(input: { action_id: string; approve: boolean }) {
-    const out = await handleApproval(this.db(), this.env, { ...input, approver_id: "usr_marie" }, this.#emit);
+    const out = await handleApproval(this.db(), await this.#runEnv(), { ...input, approver_id: "usr_marie" }, this.#emit);
     await this.refresh();
     return out;
   }
@@ -130,6 +213,30 @@ export class YesChefAgent extends Agent<Env, ShopState> {
 
   async chain() {
     return ledger.verifyChain(this.db());
+  }
+
+  /**
+   * Demo settings that are not shop data, so they live in the agent's own storage:
+   * where phones can reach this shop (a tunnel to the laptop), and slow mode
+   * (a pause between targets so the kill switch can be shown mid-run).
+   */
+  async config(input?: { public_url?: string | null; slow?: boolean }) {
+    if (input && "public_url" in input) {
+      const v = (input.public_url ?? "").replace(/\/$/, "");
+      this.sql`INSERT OR REPLACE INTO kv (k, v) VALUES ('public_url', ${v})`;
+    }
+    if (input && "slow" in input) {
+      this.sql`INSERT OR REPLACE INTO kv (k, v) VALUES ('slow', ${input.slow ? "1" : "0"})`;
+    }
+    const rows = this.sql<{ k: string; v: string }>`SELECT k, v FROM kv WHERE k IN ('public_url', 'slow')`;
+    const get = (k: string) => rows.find((r) => r.k === k)?.v ?? "";
+    return { public_url: get("public_url") || null, slow: get("slow") === "1" };
+  }
+
+  /** Env plus the runtime demo settings the orchestrator reads. */
+  async #runEnv() {
+    const cfg = await this.config();
+    return { ...this.env, slowMs: cfg.slow ? 2500 : 0 } as Env;
   }
 
   /** Connectivity check used by /api/health. */

@@ -876,7 +876,24 @@
     return s ? s.text_en : String(id || "").replace(/^item_/, "");
   }
 
+  var configP = null;
+  /** GET /api/config once: { public_url: string | null }. Never rejects. */
+  function config() {
+    if (configP) return configP;
+    if (MOCK) return (configP = Promise.resolve({ public_url: null }));
+    configP = fetch("/api/config")
+      .then(function (r) { return r.ok ? r.json() : { public_url: null }; })
+      .catch(function () { return { public_url: null }; })
+      .then(function (c) {
+        c = c || {};
+        var u = c.public_url ? String(c.public_url).replace(/\/+$/, "") : null;
+        return { public_url: u };
+      });
+    return configP;
+  }
+
   window.YC = {
+    config: config,
     MOCK: MOCK,
     KEY: KEY,
     qs: qs,

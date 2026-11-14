@@ -1,6 +1,6 @@
 // Yes Chef ledger: every read and write against Atlas. Runs in Node and in a Cloudflare
 // Worker / Durable Object: uses only the `mongodb` driver and Web Crypto.
-import type { ClientSession, Db } from "mongodb";
+import type { AnyClientBulkWriteModel, ClientSession, Db } from "mongodb";
 import {
   AGENT_ID,
   SHOP_ID,
@@ -144,92 +144,189 @@ interface AuditInput {
   detail?: Record<string, unknown>;
 }
 
-/** Append one audit entry inside the given session: reads control, inserts the entry, advances control. */
-async function appendAudit(
+// ---------- chain head cache and one-round-trip transactions ----------
+
+interface Head {
+  seq: number;
+  hash: string;
+}
+/** Chain head per database. The Durable Object is the only writer; a stale head is detected and re-read once. */
+const HEADS = new Map<string, Head>();
+
+async function readHead(db: Db): Promise<Head> {
+  const ctl = await db
+    .collection<AnyDoc>("control")
+    .findOne({ _id: SHOP_ID }, { projection: { audit_seq: 1, last_hash: 1 } });
+  const head = { seq: ctl?.audit_seq ?? 0, hash: ctl?.last_hash ?? "genesis" };
+  HEADS.set(db.databaseName, head);
+  return head;
+}
+
+async function ensureHead(db: Db): Promise<Head> {
+  return HEADS.get(db.databaseName) ?? readHead(db);
+}
+
+class StaleChain extends Error {}
+class WrongStatus extends Error {}
+
+interface Op {
+  model: AnyClientBulkWriteModel<AnyDoc>;
+  mustMatch?: string; // error message if this update matches nothing
+}
+
+function isDupKey(e: any): boolean {
+  if (e?.code === 11000) return true;
+  const we = e?.writeErrors;
+  if (we && typeof we.values === "function")
+    for (const w of we.values()) if (w?.code === 11000) return true;
+  return /E11000/.test(String(e?.message ?? ""));
+}
+
+async function buildEntries(head: Head, list: AuditInput[]): Promise<AnyDoc[]> {
+  let prevHash = head.hash;
+  let seq = head.seq;
+  const ts = new Date().toISOString();
+  const out: AnyDoc[] = [];
+  for (const e of list) {
+    const entry: AnyDoc = clean({
+      shop_id: SHOP_ID,
+      seq: ++seq,
+      ts,
+      event: e.event,
+      action_id: e.action_id ?? null,
+      run_id: e.run_id ?? null,
+      actor: {
+        human_id: e.actor.human_id,
+        role: e.actor.role,
+        agent_id: e.actor.agent_id,
+      },
+      detail: toPlain(e.detail ?? {}),
+      prev_hash: prevHash,
+    });
+    entry.hash = await entryHash(entry);
+    prevHash = entry.hash;
+    out.push(entry);
+  }
+  return out;
+}
+
+/**
+ * One transaction = one client.bulkWrite (all ops + audit inserts + control compare-and-swap) + commit.
+ * If the cached chain head is stale, re-read control and try once more.
+ */
+async function txWrite(
   db: Db,
-  session: ClientSession,
-  e: AuditInput,
-): Promise<AuditEntry> {
-  const control = db.collection<AnyDoc>("control");
-  const ctl = await control.findOne({ _id: SHOP_ID }, { session });
-  const prevSeq: number = ctl?.audit_seq ?? 0;
-  const prevHash: string = ctl?.last_hash ?? "genesis";
-  const entry: AnyDoc = clean({
-    shop_id: SHOP_ID,
-    seq: prevSeq + 1,
-    ts: new Date().toISOString(),
-    event: e.event,
-    action_id: e.action_id ?? null,
-    run_id: e.run_id ?? null,
-    actor: {
-      human_id: e.actor.human_id,
-      role: e.actor.role,
-      agent_id: e.actor.agent_id,
-    },
-    detail: toPlain(e.detail ?? {}),
-    prev_hash: prevHash,
-  });
-  entry.hash = await entryHash(entry);
-  await db.collection<AnyDoc>("audit").insertOne(entry, { session });
-  const r = await control.updateOne(
-    { _id: SHOP_ID, audit_seq: prevSeq },
-    { $set: { audit_seq: entry.seq, last_hash: entry.hash } },
-    { session, upsert: !ctl },
-  );
-  if (!ctl ? false : r.matchedCount !== 1)
-    throw new Error("audit counter moved; retry");
-  delete entry._id;
-  return entry as AuditEntry;
+  ops: Op[],
+  audits: AuditInput[],
+): Promise<AuditEntry[]> {
+  const ns = (c: string) => `${db.databaseName}.${c}`;
+  for (let attempt = 0; ; attempt++) {
+    const head = attempt === 0 ? await ensureHead(db) : await readHead(db);
+    const entries = await buildEntries(head, audits);
+    const models: AnyClientBulkWriteModel<AnyDoc>[] = ops.map((o) => o.model);
+    for (const e of entries)
+      models.push({ name: "insertOne", namespace: ns("audit"), document: e });
+    const casIdx = models.length;
+    const newHead = entries.length
+      ? {
+          seq: head.seq + entries.length,
+          hash: entries[entries.length - 1].hash,
+        }
+      : head;
+    if (entries.length) {
+      models.push({
+        name: "updateOne",
+        namespace: ns("control"),
+        filter: { _id: SHOP_ID, audit_seq: head.seq },
+        update: { $set: { audit_seq: newHead.seq, last_hash: newHead.hash } },
+      });
+    }
+    try {
+      await inTxn(db, async (session) => {
+        const r = await db.client.bulkWrite(models, {
+          session,
+          ordered: true,
+          verboseResults: true,
+        });
+        ops.forEach((o, i) => {
+          if (o.mustMatch && (r.updateResults?.get(i)?.matchedCount ?? 0) !== 1)
+            throw new WrongStatus(o.mustMatch);
+        });
+        if (
+          entries.length &&
+          (r.updateResults?.get(casIdx)?.matchedCount ?? 0) !== 1
+        )
+          throw new StaleChain("chain head moved");
+      });
+      HEADS.set(db.databaseName, newHead);
+      for (const e of entries) delete e._id;
+      return entries as AuditEntry[];
+    } catch (e) {
+      if (attempt === 0 && (e instanceof StaleChain || isDupKey(e))) continue;
+      throw e;
+    }
+  }
 }
 
 const actions = (db: Db) => db.collection<ActionDoc>("actions");
 
-async function getAction(
-  db: Db,
-  id: string,
-  session?: ClientSession,
-): Promise<ActionDoc> {
-  const a = await actions(db).findOne({ _id: id }, { session });
+async function getAction(db: Db, id: string): Promise<ActionDoc> {
+  const a = await actions(db).findOne({ _id: id });
   if (!a) throw new Error(`action ${id} not found`);
   return a;
 }
 
+/** Apply a $set (dotted paths allowed) to an in-memory copy. */
+function applySet<T>(doc: T, set: AnyDoc): T {
+  const out: AnyDoc = clean(doc as AnyDoc);
+  for (const [path, v] of Object.entries(set)) {
+    const parts = path.split(".");
+    let cur = out;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (cur[parts[i]] === null || typeof cur[parts[i]] !== "object")
+        cur[parts[i]] = {};
+      cur = cur[parts[i]];
+    }
+    cur[parts[parts.length - 1]] = v;
+  }
+  return out as T;
+}
+
 /**
- * One state step: filtered action update + audit insert + control update in one transaction.
- * Throws if the action is not in one of the expected statuses.
+ * One state step: filtered action update (status must be one of `expected`) + audit + chain head,
+ * plus any extra ops, in one transaction (bulkWrite + commit). Returns the updated doc built in memory.
  */
 async function step(
   db: Db,
-  action_id: string,
+  a: ActionDoc,
   expected: ActionStatus | ActionStatus[],
   set: AnyDoc,
-  audit: Omit<AuditInput, "action_id"> | null,
-  extra?: (s: ClientSession) => Promise<void>,
+  audits: AuditInput[],
+  extra: Op[] = [],
 ): Promise<ActionDoc> {
   const exp = Array.isArray(expected) ? expected : [expected];
-  return inTxn(db, async (session) => {
-    const r = await actions(db).updateOne(
-      { _id: action_id, status: { $in: exp } },
-      { $set: clean({ ...set, updated_at: new Date() }) },
-      { session },
-    );
-    if (r.matchedCount !== 1) {
-      const cur = await actions(db).findOne({ _id: action_id }, { session });
-      throw new Error(
-        `action ${action_id} is ${cur?.status ?? "missing"}, expected ${exp.join("|")}`,
-      );
-    }
-    if (audit) {
-      const cur = await getAction(db, action_id, session);
-      await appendAudit(db, session, {
-        ...audit,
-        action_id,
-        run_id: audit.run_id ?? cur.run_id,
-      });
-    }
-    if (extra) await extra(session);
-    return getAction(db, action_id, session);
-  });
+  const fullSet = clean({ ...set, updated_at: new Date() });
+  await txWrite(
+    db,
+    [
+      {
+        model: {
+          name: "updateOne",
+          namespace: `${db.databaseName}.actions`,
+          filter: { _id: a._id, status: { $in: exp } },
+          update: { $set: fullSet },
+        },
+        mustMatch: `action ${a._id} is missing or not ${exp.join("|")}`,
+      },
+      ...extra,
+    ],
+    audits.map((e) => ({
+      ...e,
+      action_id: e.action_id ?? a._id,
+      run_id: e.run_id ?? a.run_id,
+    })),
+  );
+  return applySet(a, fullSet);
 }
 
 // ---------- reads ----------
@@ -257,7 +354,9 @@ export async function getIdentity(
 }
 
 export async function isHalted(db: Db): Promise<boolean> {
-  const c = await db.collection<AnyDoc>("control").findOne({ _id: SHOP_ID });
+  const c = await db
+    .collection<AnyDoc>("control")
+    .findOne({ _id: SHOP_ID }, { projection: { halt: 1 } });
   return !!c?.halt;
 }
 
@@ -274,42 +373,119 @@ export async function setHalt(
   halt: boolean,
   actor: Actor,
 ): Promise<void> {
-  await inTxn(db, async (session) => {
-    await db
-      .collection<AnyDoc>("control")
-      .updateOne({ _id: SHOP_ID }, { $set: { halt } }, { session });
-    await appendAudit(db, session, {
-      event: halt ? "halt.set" : "halt.cleared",
-      actor,
-      detail: { halt },
-    });
-  });
+  await txWrite(
+    db,
+    [
+      {
+        model: {
+          name: "updateOne",
+          namespace: `${db.databaseName}.control`,
+          filter: { _id: SHOP_ID },
+          update: { $set: { halt } },
+        },
+      },
+    ],
+    [{ event: halt ? "halt.set" : "halt.cleared", actor, detail: { halt } }],
+  );
 }
 
 export async function auditEvent(db: Db, e: AuditInput): Promise<void> {
-  await inTxn(db, (session) => appendAudit(db, session, e));
+  await txWrite(db, [], [e]);
 }
 
-export async function proposeAction(
+interface ProposeInput {
+  run_id: string;
+  type: ActionType;
+  actor: Actor;
+  utterance: ActionDoc["utterance"];
+  evidence: Evidence[];
+  params: ActionParams;
+  undo_of?: string | null;
+}
+
+function decisionStatus(d: PolicyDecision): {
+  status: ActionStatus;
+  event: string;
+  policy: PolicyDecision;
+} {
+  const status: ActionStatus =
+    d.decision === "allow"
+      ? "allowed"
+      : d.decision === "needs_approval"
+        ? "pending_approval"
+        : "blocked";
+  const event =
+    status === "allowed"
+      ? "policy.allowed"
+      : status === "pending_approval"
+        ? "policy.held"
+        : "policy.blocked";
+  const policy = clean({
+    decision: d.decision === "pending" ? "deny" : d.decision,
+    rule_id: d.rule_id ?? null,
+    version: d.version ?? null,
+    reason: d.reason ?? null,
+  }) as PolicyDecision;
+  return { status, event, policy };
+}
+
+function decisionAudit(
+  actor: Actor,
+  event: string,
+  policy: PolicyDecision,
+): AuditInput {
+  return {
+    event,
+    actor,
+    detail: {
+      decision: policy.decision,
+      rule_id: policy.rule_id,
+      version: policy.version,
+      reason: policy.reason,
+    },
+  };
+}
+
+/** Actions this process began publishing (proposeDecided with begin), so publish() can skip a read. */
+const BEGUN = new Map<string, ActionDoc>();
+
+async function insertAction(
   db: Db,
-  input: {
-    run_id: string;
-    type: ActionType;
-    actor: Actor;
-    utterance: ActionDoc["utterance"];
-    evidence: Evidence[];
-    params: ActionParams;
-    undo_of?: string | null;
-  },
+  input: ProposeInput,
+  decision: PolicyDecision | null,
+  begin: boolean,
 ): Promise<ActionDoc> {
   const now = new Date();
-  const ident = await getIdentity(db, input.actor.human_id);
+  const judged = decision ? decisionStatus(decision) : null;
+  const canBegin =
+    begin &&
+    judged?.status === "allowed" &&
+    input.type !== "undo" &&
+    !!input.params?.item_id;
+  const [ident, currents] = await Promise.all([
+    getIdentity(db, input.actor.human_id),
+    canBegin
+      ? Promise.all(
+          ORDER.map((n) =>
+            db
+              .collection<AnyDoc>(COLL[n])
+              .findOne({ _id: input.params.item_id! }),
+          ),
+        )
+      : Promise.resolve(null),
+    ensureHead(db),
+  ]);
+  const status: ActionStatus = canBegin
+    ? "applying"
+    : judged
+      ? judged.status
+      : "proposed";
   const doc: ActionDoc = clean({
     _id: newId("act"),
     shop_id: SHOP_ID,
     run_id: input.run_id,
     type: input.type,
-    status: "proposed",
+    status,
     actor: {
       human_id: input.actor.human_id,
       role: input.actor.role,
@@ -322,18 +498,23 @@ export async function proposeAction(
     },
     evidence: input.evidence ?? [],
     params: input.params ?? {},
-    policy: { decision: "pending", rule_id: null, version: null, reason: null },
-    targets: ORDER.map((name) => ({ name, status: "pending", previous: null })),
+    policy: judged
+      ? judged.policy
+      : { decision: "pending", rule_id: null, version: null, reason: null },
+    targets: ORDER.map((name, i) => ({
+      name,
+      status: "pending",
+      previous: currents ? (currents[i] ?? null) : null,
+    })),
     undo_of: input.undo_of ?? null,
     created_at: now,
     updated_at: now,
   } as ActionDoc);
-  await inTxn(db, async (session) => {
-    await actions(db).insertOne(doc, { session });
-    await appendAudit(db, session, {
+  const ids = { action_id: doc._id, run_id: doc.run_id };
+  const audits: AuditInput[] = [
+    {
       event: "action.proposed",
-      action_id: doc._id,
-      run_id: doc.run_id,
+      ...ids,
       actor: doc.actor,
       detail: clean({
         type: doc.type,
@@ -342,9 +523,56 @@ export async function proposeAction(
         speaker_name: ident?.name ?? doc.actor.human_id,
         undo_of: doc.undo_of,
       }),
+    },
+  ];
+  if (judged)
+    audits.push({
+      ...decisionAudit(doc.actor, judged.event, judged.policy),
+      ...ids,
     });
-  });
+  if (canBegin)
+    audits.push({
+      event: "action.applying",
+      ...ids,
+      actor: doc.actor,
+      detail: { type: doc.type, item_id: doc.params.item_id },
+    });
+  await txWrite(
+    db,
+    [
+      {
+        model: {
+          name: "insertOne",
+          namespace: `${db.databaseName}.actions`,
+          document: doc,
+        },
+      },
+    ],
+    audits,
+  );
+  if (canBegin) BEGUN.set(doc._id, doc);
   return doc;
+}
+
+export async function proposeAction(
+  db: Db,
+  input: ProposeInput,
+): Promise<ActionDoc> {
+  return insertAction(db, input, null, false);
+}
+
+/**
+ * Insert the action already judged (allowed | blocked | pending_approval) with its audit entries, one transaction.
+ * With `begin: true` and an allow decision (not undo), it also reads the three targets, stores `previous`
+ * and records action.applying in the same transaction: the returned status is then "applying",
+ * and the caller must call publish() next (in this process).
+ */
+export async function proposeDecided(
+  db: Db,
+  input: ProposeInput & { decision: PolicyDecision; begin?: boolean },
+): Promise<ActionDoc> {
+  const { decision, begin, ...rest } = input;
+  return insertAction(db, rest, decision, !!begin);
 }
 
 export async function recordDecision(
@@ -352,41 +580,11 @@ export async function recordDecision(
   action_id: string,
   decision: PolicyDecision,
 ): Promise<ActionDoc> {
-  const status: ActionStatus =
-    decision.decision === "allow"
-      ? "allowed"
-      : decision.decision === "needs_approval"
-        ? "pending_approval"
-        : "blocked";
-  const event =
-    status === "allowed"
-      ? "policy.allowed"
-      : status === "pending_approval"
-        ? "policy.held"
-        : "policy.blocked";
   const a = await getAction(db, action_id);
-  const policy = clean({
-    decision: decision.decision === "pending" ? "deny" : decision.decision,
-    rule_id: decision.rule_id ?? null,
-    version: decision.version ?? null,
-    reason: decision.reason ?? null,
-  });
-  return step(
-    db,
-    action_id,
-    "proposed",
-    { status, policy },
-    {
-      event,
-      actor: a.actor,
-      detail: {
-        decision: policy.decision,
-        rule_id: policy.rule_id,
-        version: policy.version,
-        reason: policy.reason,
-      },
-    },
-  );
+  const { status, event, policy } = decisionStatus(decision);
+  return step(db, a, "proposed", { status, policy }, [
+    decisionAudit(a.actor, event, policy),
+  ]);
 }
 
 export async function resolveApproval(
@@ -394,8 +592,10 @@ export async function resolveApproval(
   action_id: string,
   input: { approve: boolean; approver: { human_id: string; role: string } },
 ): Promise<ActionDoc> {
-  const a = await getAction(db, action_id);
-  const ident = await getIdentity(db, input.approver.human_id);
+  const [a, ident] = await Promise.all([
+    getAction(db, action_id),
+    getIdentity(db, input.approver.human_id),
+  ]);
   const actor = {
     human_id: input.approver.human_id,
     role: input.approver.role,
@@ -406,7 +606,7 @@ export async function resolveApproval(
     const at = new Date().toISOString();
     return step(
       db,
-      action_id,
+      a,
       "pending_approval",
       {
         status: "allowed",
@@ -414,23 +614,21 @@ export async function resolveApproval(
         "policy.approved_by": input.approver.human_id,
         "policy.approved_at": at,
       },
-      {
-        event: "approval.granted",
-        actor,
-        detail: {
-          approver_name,
-          rule_id: a.policy.rule_id,
-          version: a.policy.version,
-          reason: a.policy.reason,
+      [
+        {
+          event: "approval.granted",
+          actor,
+          detail: {
+            approver_name,
+            rule_id: a.policy.rule_id,
+            version: a.policy.version,
+            reason: a.policy.reason,
+          },
         },
-      },
+      ],
     );
   }
-  return step(
-    db,
-    action_id,
-    "pending_approval",
-    { status: "rejected" },
+  return step(db, a, "pending_approval", { status: "rejected" }, [
     {
       event: "approval.denied",
       actor,
@@ -440,7 +638,7 @@ export async function resolveApproval(
         version: a.policy.version,
       },
     },
-  );
+  ]);
 }
 
 // ---------- publishing ----------
@@ -492,22 +690,216 @@ const TARGET_LABEL: Record<TargetName, string> = {
   till: "Till",
 };
 
-async function setTarget(
-  db: Db,
-  action_id: string,
-  idx: number,
-  fields: AnyDoc,
-  audit: Omit<AuditInput, "action_id"> | null,
-  expected: ActionStatus[] = ["applying", "applied"],
-): Promise<ActionDoc> {
-  const set: AnyDoc = {};
-  for (const [k, v] of Object.entries(fields)) set[`targets.${idx}.${k}`] = v;
-  return step(db, action_id, expected, set, audit);
-}
-
 interface PublishOpts {
   slowMs?: number;
   onStep?: (s: TraceStep) => void | Promise<void>;
+}
+
+/** One planned target write: which target, the doc before, and what to write. */
+interface Plan {
+  idx: number; // index in action.targets
+  name: TargetName;
+  previous: AnyDoc | null;
+  write: (
+    coll: ReturnType<Db["collection"]>,
+    item_id: string,
+  ) => Promise<unknown>;
+  expect: AnyDoc; // fields that must read back
+  detail: AnyDoc; // audit detail for target.applied
+}
+
+interface Written {
+  plan: Plan;
+  at: string; // ISO write time
+}
+
+interface Finish {
+  set: AnyDoc;
+  audits: AuditInput[];
+  extra: (menuBefore: AnyDoc | null) => Op[];
+  label: string;
+}
+
+/**
+ * Shared engine for publish and undo; the action is already "applying" with `previous` stored.
+ * Round trips: per target (halt read + write), 1 parallel read-back (+ menu_items), 1 transaction.
+ */
+async function runPlans(
+  db: Db,
+  a: ActionDoc,
+  item_id: string,
+  plans: Plan[],
+  opts: PublishOpts,
+  finish: Finish,
+): Promise<ActionDoc> {
+  const action_id = a._id;
+  const sys = agentActor();
+  const written: Written[] = [];
+  for (const p of plans) {
+    if (await isHalted(db))
+      return compensate(db, a, item_id, written, "halted", opts);
+    const coll = db.collection<AnyDoc>(COLL[p.name]);
+    try {
+      const r = (await p.write(coll as any, item_id)) as AnyDoc;
+      if (r && r.matchedCount === 0)
+        throw new Error(`${p.name} has no document for ${item_id}`);
+    } catch (err) {
+      await opts.onStep?.({
+        key: "target",
+        label: `${TARGET_LABEL[p.name]} write failed`,
+        status: "fail",
+        detail: errText(err),
+      });
+      written.push({ plan: p, at: new Date().toISOString() });
+      return compensate(db, a, item_id, written, "failed", opts, errText(err));
+    }
+    written.push({ plan: p, at: new Date().toISOString() });
+    await opts.onStep?.({
+      key: "target",
+      label: `${TARGET_LABEL[p.name]} ${a.type === "undo" ? "restored" : "updated"}`,
+      status: "ok",
+      detail: describeChanges(p.detail.changes ?? {}),
+    });
+    if (opts.slowMs) await sleep(opts.slowMs);
+  }
+
+  const [now, menuBefore] = await Promise.all([
+    Promise.all(
+      plans.map((p) =>
+        db.collection<AnyDoc>(COLL[p.name]).findOne({ _id: item_id }),
+      ),
+    ),
+    db.collection<AnyDoc>("menu_items").findOne({ _id: item_id }),
+  ]);
+  const bad = plans.findIndex(
+    (p, i) =>
+      !now[i] ||
+      now[i]!.action_id !== action_id ||
+      !sameFields(now[i], p.expect),
+  );
+  if (bad >= 0) {
+    await opts.onStep?.({
+      key: "verified",
+      label: `${TARGET_LABEL[plans[bad].name]} read-back mismatch`,
+      status: "fail",
+    });
+    return compensate(
+      db,
+      a,
+      item_id,
+      written,
+      "failed",
+      opts,
+      `${plans[bad].name} read-back mismatch`,
+    );
+  }
+
+  const verifiedAt = new Date();
+  const extraOps = finish.extra(menuBefore);
+  const set: AnyDoc = { ...finish.set };
+  const audits: AuditInput[] = [];
+  for (const w of written) {
+    set[`targets.${w.plan.idx}.status`] = "verified";
+    set[`targets.${w.plan.idx}.applied_at`] = new Date(w.at);
+    set[`targets.${w.plan.idx}.verified_at`] = verifiedAt;
+    audits.push({
+      event: "target.applied",
+      actor: sys,
+      detail: {
+        ...w.plan.detail,
+        target: w.plan.name,
+        item_id,
+        written_at: w.at,
+      },
+    });
+  }
+  for (const w of written)
+    audits.push({
+      event: "target.verified",
+      actor: sys,
+      detail: { target: w.plan.name, item_id },
+    });
+  audits.push(...finish.audits);
+  const done = await step(
+    db,
+    a,
+    "applying",
+    set,
+    audits, extraOps);
+  await opts.onStep?.({ key: "verified", label: finish.label, status: "ok" });
+  return done;
+}
+
+/** Restore written targets from `previous` (in parallel), then one transaction for the audit and final status. */
+async function compensate(
+  db: Db,
+  a: ActionDoc,
+  item_id: string,
+  written: Written[],
+  final: "halted" | "failed",
+  opts: PublishOpts,
+  why?: string,
+): Promise<ActionDoc> {
+  const sys = agentActor();
+  const toRestore = [...written].reverse();
+  await Promise.all(
+    toRestore.map((w) => {
+      const coll = db.collection<AnyDoc>(COLL[w.plan.name]);
+      return w.plan.previous
+        ? coll.replaceOne({ _id: item_id }, clean(w.plan.previous))
+        : coll.deleteOne({ _id: item_id });
+    }),
+  );
+  const set: AnyDoc = { status: final };
+  const audits: AuditInput[] = [];
+  for (const w of written) {
+    audits.push({
+      event: "target.applied",
+      actor: sys,
+      detail: {
+        ...w.plan.detail,
+        target: w.plan.name,
+        item_id,
+        written_at: w.at,
+      },
+    });
+  }
+  for (const w of toRestore) {
+    set[`targets.${w.plan.idx}.status`] = "reverted";
+    set[`targets.${w.plan.idx}.applied_at`] = new Date(w.at);
+    audits.push({
+      event: "target.reverted",
+      actor: sys,
+      detail: {
+        target: w.plan.name,
+        item_id,
+        restored_action_id: w.plan.previous?.action_id ?? null,
+      },
+    });
+  }
+  audits.push({
+    event: `action.${final}`,
+    actor: sys,
+    detail: why ? { reason: why } : {},
+  });
+  const done = await step(db, a, "applying", set, audits);
+  for (const w of toRestore) {
+    await opts.onStep?.({
+      key: "target",
+      label: `${TARGET_LABEL[w.plan.name]} restored`,
+      status: "info",
+    });
+  }
+  await opts.onStep?.({
+    key: "note",
+    label:
+      final === "halted"
+        ? "Stopped by the kill switch; nothing left half-published"
+        : "Failed; targets restored",
+    status: "fail",
+    detail: why,
+  });
+  return done;
 }
 
 export async function publish(
@@ -515,137 +907,53 @@ export async function publish(
   action_id: string,
   opts: PublishOpts = {},
 ): Promise<ActionDoc> {
-  let a = await getAction(db, action_id);
+  let a = BEGUN.get(action_id) ?? null;
+  BEGUN.delete(action_id);
+  if (!a) {
+    a = await getAction(db, action_id);
+    if (a.status !== "allowed")
+      throw new Error(`action ${action_id} is ${a.status}, expected allowed`);
+  }
   if (a.type === "undo") return publishUndo(db, a, opts);
   const item_id = a.params.item_id;
   if (!item_id) throw new Error(`action ${action_id} has no item_id`);
   const sys = agentActor();
 
-  a = await step(
-    db,
-    action_id,
-    "allowed",
-    { status: "applying" },
-    {
-      event: "action.applying",
-      actor: a.actor,
-      detail: { type: a.type, item_id },
-    },
-  );
-
-  const intended: Partial<Record<TargetName, AnyDoc>> = {};
-  for (let i = 0; i < ORDER.length; i++) {
-    const name = ORDER[i];
-    if (await isHalted(db)) return compensate(db, action_id, "halted", opts);
-    const coll = db.collection<AnyDoc>(COLL[name]);
-    const current = await coll.findOne({ _id: item_id });
-    const changes = changesFor(a.type, a.params, name);
-    intended[name] = changes;
-    if (
-      current &&
-      current.action_id === action_id &&
-      sameFields(current, changes)
-    ) {
-      // already written by an earlier attempt: skip
-    } else {
-      await setTarget(
-        db,
-        action_id,
-        i,
-        { status: "pending", previous: current ?? null },
-        null,
-        ["applying"],
-      );
-      try {
-        const r = await coll.updateOne(
-          { _id: item_id },
-          { $set: { ...changes, action_id, updated_at: new Date() } },
-        );
-        if (r.matchedCount !== 1)
-          throw new Error(`${name} has no document for ${item_id}`);
-      } catch (err) {
-        await opts.onStep?.({
-          key: "target",
-          label: `${TARGET_LABEL[name]} write failed`,
-          status: "fail",
-          detail: errText(err),
-        });
-        return compensate(db, action_id, "failed", opts, errText(err));
-      }
-    }
-    await setTarget(
-      db,
-      action_id,
-      i,
-      { status: "applied", applied_at: new Date() },
-      {
-        event: "target.applied",
-        actor: sys,
-        detail: { target: name, item_id, changes },
-      },
-      ["applying"],
+  if (a.status === "allowed") {
+    // Not begun by proposeDecided: read the targets, then one transaction to start.
+    const currents = await Promise.all(
+      ORDER.map((n) =>
+        db.collection<AnyDoc>(COLL[n]).findOne({ _id: item_id }),
+      ),
     );
-    await opts.onStep?.({
-      key: "target",
-      label: `${TARGET_LABEL[name]} updated`,
-      status: "ok",
-      detail: describeChanges(changes),
-    });
-    if (opts.slowMs) await sleep(opts.slowMs);
-  }
-
-  await step(
-    db,
-    action_id,
-    "applying",
-    { status: "applied" },
-    {
-      event: "action.applied",
-      actor: sys,
-      detail: { targets: ORDER },
-    },
-  );
-
-  for (let i = 0; i < ORDER.length; i++) {
-    const name = ORDER[i];
-    const now = await db
-      .collection<AnyDoc>(COLL[name])
-      .findOne({ _id: item_id });
-    if (
-      !now ||
-      now.action_id !== action_id ||
-      !sameFields(now, intended[name]!)
-    ) {
-      await opts.onStep?.({
-        key: "verified",
-        label: `${TARGET_LABEL[name]} read-back mismatch`,
-        status: "fail",
-      });
-      return compensate(
-        db,
-        action_id,
-        "failed",
-        opts,
-        `${name} read-back mismatch`,
-      );
-    }
-    await setTarget(
-      db,
-      action_id,
-      i,
-      { status: "verified", verified_at: new Date() },
-      {
-        event: "target.verified",
-        actor: sys,
-        detail: { target: name, item_id },
-      },
-      ["applied"],
+    const startSet: AnyDoc = { status: "applying" };
+    ORDER.forEach(
+      (_, i) => (startSet[`targets.${i}.previous`] = currents[i] ?? null),
     );
+    a = await step(db, a, "allowed", startSet, [
+      {
+        event: "action.applying",
+        actor: a.actor,
+        detail: { type: a.type, item_id },
+      },
+    ]);
   }
+  const act = a;
+  const plans: Plan[] = ORDER.map((name, idx) => {
+    const changes = changesFor(act.type, act.params, name);
+    return {
+      idx,
+      name,
+      previous: (act.targets[idx]?.previous as AnyDoc | null) ?? null,
+      expect: changes,
+      detail: { changes },
+      write: (coll, id) =>
+        coll.updateOne({ _id: id } as any, {
+          $set: { ...changes, action_id, updated_at: new Date() },
+        }),
+    };
+  });
 
-  // Commit intent: menu_items, then the action is verified.
-  const menuColl = db.collection<AnyDoc>("menu_items");
-  const before = await menuColl.findOne({ _id: item_id });
   const menuSet: AnyDoc = { last_action_id: action_id };
   if (a.type === "set_price") menuSet.price = Number(a.params.price);
   if (a.type === "start_promo")
@@ -658,101 +966,34 @@ export async function publish(
     };
   if (a.type === "mark_sold_out") menuSet.available = false;
   if (a.type === "mark_available") menuSet.available = true;
-  const done = await step(
-    db,
-    action_id,
-    "applied",
-    { status: "verified", menu_previous: before ?? null },
-    {
-      event: "action.verified",
-      actor: sys,
-      detail: { item_id, menu: menuSet },
-    },
-    async (session) => {
-      await menuColl.updateOne(
-        { _id: item_id },
-        { $set: clean(menuSet) },
-        { session },
-      );
-    },
-  );
-  await opts.onStep?.({
-    key: "verified",
-    label: "Read back on sign, menu and till",
-    status: "ok",
-  });
-  return done;
-}
 
-/** Restore every applied target from `previous`, in reverse order, then finish as halted or failed. */
-async function compensate(
-  db: Db,
-  action_id: string,
-  final: "halted" | "failed",
-  opts: PublishOpts,
-  why?: string,
-): Promise<ActionDoc> {
-  const a = await getAction(db, action_id);
-  const sys = agentActor();
-  for (let i = a.targets.length - 1; i >= 0; i--) {
-    const t = a.targets[i];
-    if (
-      t.status !== "applied" &&
-      t.status !== "verified" &&
-      !(t.status === "pending" && t.previous)
-    )
-      continue;
-    const item_id = a.params.item_id!;
-    const coll = db.collection<AnyDoc>(COLL[t.name]);
-    if (t.status === "pending") {
-      // previous was saved but the write may or may not have landed: restore only if it did
-      const cur = await coll.findOne({ _id: item_id });
-      if (!cur || cur.action_id !== action_id) continue;
-    }
-    if (t.previous) await coll.replaceOne({ _id: item_id }, clean(t.previous));
-    await setTarget(
-      db,
-      action_id,
-      i,
-      { status: "reverted" },
-      {
-        event: "target.reverted",
-        actor: sys,
-        detail: {
-          target: t.name,
-          item_id,
-          restored_action_id: (t.previous as AnyDoc | null)?.action_id ?? null,
-        },
-      },
-      ["applying", "applied"],
-    );
-    await opts.onStep?.({
-      key: "target",
-      label: `${TARGET_LABEL[t.name]} restored`,
-      status: "info",
-    });
-  }
-  const done = await step(
-    db,
-    action_id,
-    ["applying", "applied"],
-    { status: final },
-    {
-      event: `action.${final}`,
-      actor: sys,
-      detail: why ? { reason: why } : {},
+  let menuPrevious: AnyDoc | null = null;
+  return runPlans(db, a, item_id, plans, opts, {
+    get set() {
+      return { status: "verified", menu_previous: menuPrevious };
     },
-  );
-  await opts.onStep?.({
-    key: "note",
-    label:
-      final === "halted"
-        ? "Stopped by the kill switch; nothing left half-published"
-        : "Failed; targets restored",
-    status: "fail",
-    detail: why,
+    audits: [
+      {
+        event: "action.verified",
+        actor: sys,
+        detail: { item_id, menu: menuSet },
+      },
+    ],
+    extra: (menuBefore) => {
+      menuPrevious = menuBefore ?? null;
+      return [
+        {
+          model: {
+            name: "updateOne",
+            namespace: `${db.databaseName}.menu_items`,
+            filter: { _id: item_id },
+            update: { $set: clean(menuSet) },
+          },
+        },
+      ];
+    },
+    label: "Read back on sign, menu and till",
   });
-  return done;
 }
 
 async function publishUndo(
@@ -768,153 +1009,90 @@ async function publishUndo(
   const item_id = orig.params.item_id!;
   const sys = agentActor();
 
-  await step(
-    db,
-    action_id,
-    "allowed",
-    { status: "applying", "params.item_id": item_id },
+  const order = [...ORDER].reverse();
+  const currents = await Promise.all(
+    order.map((n) => db.collection<AnyDoc>(COLL[n]).findOne({ _id: item_id })),
+  );
+  const plans: Plan[] = [];
+  order.forEach((name, k) => {
+    const prevOrig = orig.targets.find((t) => t.name === name)
+      ?.previous as AnyDoc | null;
+    if (!prevOrig) return;
+    const idx = ORDER.indexOf(name);
+    const { updated_at, ...base } = prevOrig;
+    plans.push({
+      idx,
+      name,
+      previous: currents[k] ?? null,
+      expect: contentOf(prevOrig),
+      detail: { restored_from: orig._id },
+      write: (coll, id) =>
+        coll.replaceOne(
+          { _id: id } as any,
+          clean({ ...base, action_id, updated_at: new Date() }),
+        ),
+    });
+  });
+  const startSet: AnyDoc = { status: "applying", "params.item_id": item_id };
+  for (const p of plans) startSet[`targets.${p.idx}.previous`] = p.previous;
+  const a = await step(db, u, "allowed", startSet, [
     {
       event: "action.applying",
       actor: u.actor,
       detail: { type: "undo", undo_of: orig._id, item_id },
     },
-  );
+  ]);
 
-  const restored: Partial<Record<TargetName, AnyDoc>> = {};
-  for (let i = ORDER.length - 1; i >= 0; i--) {
-    const name = ORDER[i];
-    if (await isHalted(db)) return compensate(db, action_id, "halted", opts);
-    const prevOrig = orig.targets.find((t) => t.name === name)
-      ?.previous as AnyDoc | null;
-    if (!prevOrig) continue;
-    const coll = db.collection<AnyDoc>(COLL[name]);
-    const current = await coll.findOne({ _id: item_id });
-    await setTarget(
-      db,
-      action_id,
-      i,
-      { status: "pending", previous: current ?? null },
-      null,
-      ["applying"],
-    );
-    const doc = clean({ ...prevOrig, action_id, updated_at: new Date() });
-    restored[name] = contentOf(doc);
-    try {
-      await coll.replaceOne({ _id: item_id }, doc);
-    } catch (err) {
-      return compensate(db, action_id, "failed", opts, errText(err));
-    }
-    await setTarget(
-      db,
-      action_id,
-      i,
-      { status: "applied", applied_at: new Date() },
-      {
-        event: "target.applied",
-        actor: sys,
-        detail: { target: name, item_id, restored_from: orig._id },
-      },
-      ["applying"],
-    );
-    await opts.onStep?.({
-      key: "target",
-      label: `${TARGET_LABEL[name]} restored`,
-      status: "ok",
-    });
-    if (opts.slowMs) await sleep(opts.slowMs);
-  }
-
-  await step(
-    db,
-    action_id,
-    "applying",
-    { status: "applied" },
-    { event: "action.applied", actor: sys, detail: {} },
-  );
-
-  for (let i = ORDER.length - 1; i >= 0; i--) {
-    const name = ORDER[i];
-    if (!restored[name]) continue;
-    const now = await db
-      .collection<AnyDoc>(COLL[name])
-      .findOne({ _id: item_id });
-    if (
-      !now ||
-      now.action_id !== action_id ||
-      !sameFields(now, restored[name]!)
-    ) {
-      return compensate(
-        db,
-        action_id,
-        "failed",
-        opts,
-        `${name} read-back mismatch`,
-      );
-    }
-    await setTarget(
-      db,
-      action_id,
-      i,
-      { status: "verified", verified_at: new Date() },
-      {
-        event: "target.verified",
-        actor: sys,
-        detail: { target: name, item_id },
-      },
-      ["applied"],
-    );
-  }
-
-  const menuColl = db.collection<AnyDoc>("menu_items");
   const menuPrev = (orig as AnyDoc).menu_previous as AnyDoc | null;
-  const done = await step(
-    db,
-    action_id,
-    "applied",
-    { status: "verified" },
-    {
-      event: "action.verified",
-      actor: sys,
-      detail: { item_id, undo_of: orig._id },
-    },
-    async (session) => {
-      if (menuPrev) {
-        await menuColl.replaceOne(
-          { _id: item_id },
-          clean({ ...menuPrev, last_action_id: action_id }),
-          { session },
-        );
-      }
-      const r = await actions(db).updateOne(
-        { _id: orig._id, status: "verified" },
-        {
-          $set: {
-            status: "rolled_back",
-            rolled_back_by: action_id,
-            updated_at: new Date(),
-          },
-        },
-        { session },
-      );
-      if (r.matchedCount !== 1)
-        throw new Error(`original ${orig._id} is no longer verified`);
-      await appendAudit(db, session, {
+  return runPlans(db, a, item_id, plans, opts, {
+    set: { status: "verified" },
+    audits: [
+      {
+        event: "action.verified",
+        actor: sys,
+        detail: { item_id, undo_of: orig._id },
+      },
+      {
         event: "action.rolled_back",
         action_id: orig._id,
         run_id: orig.run_id,
         actor: u.actor,
         detail: { undo_action_id: action_id },
-      });
+      },
+    ],
+    extra: () => {
+      const ops: Op[] = [
+        {
+          model: {
+            name: "updateOne",
+            namespace: `${db.databaseName}.actions`,
+            filter: { _id: orig._id, status: "verified" },
+            update: {
+              $set: {
+                status: "rolled_back",
+                rolled_back_by: action_id,
+                updated_at: new Date(),
+              },
+            },
+          },
+          mustMatch: `original ${orig._id} is no longer verified`,
+        },
+      ];
+      if (menuPrev) {
+        ops.push({
+          model: {
+            name: "replaceOne",
+            namespace: `${db.databaseName}.menu_items`,
+            filter: { _id: item_id },
+            replacement: clean({ ...menuPrev, last_action_id: action_id }),
+          },
+        });
+      }
+      return ops;
     },
-  );
-  await opts.onStep?.({
-    key: "verified",
     label: "Undo read back on sign, menu and till",
-    status: "ok",
   });
-  return done;
 }
-
 function errText(err: unknown): string {
   const e = err as AnyDoc;
   const details = e?.errInfo?.details;
@@ -928,7 +1106,6 @@ function describeChanges(c: AnyDoc): string {
     .map(([k, v]) => `${k}=${v}`)
     .join(", ");
 }
-
 export async function findLastUndoable(db: Db): Promise<ActionDoc | null> {
   return actions(db).findOne(
     { shop_id: SHOP_ID, status: "verified", type: { $ne: "undo" } },
@@ -1021,19 +1198,20 @@ export async function explain(
       ? nothing
       : { text: "Nothing has changed today.", action_id: null };
 
-  const audit = await db
-    .collection<AuditEntry>("audit")
-    .find({ action_id: action._id }, { sort: { seq: 1 } })
-    .toArray();
+  const [audit, original] = await Promise.all([
+    db
+      .collection<AuditEntry>("audit")
+      .find({ action_id: action._id }, { sort: { seq: 1 } })
+      .toArray(),
+    action.type === "undo" && action.undo_of
+      ? actions(db).findOne({ _id: action.undo_of })
+      : Promise.resolve(null),
+  ]);
   const ev = (name: string) => audit.find((e) => e.event === name);
   const proposed = ev("action.proposed");
   const speaker = String(
     proposed?.detail?.speaker_name ?? action.actor.human_id,
   );
-
-  let original: ActionDoc | null = null;
-  if (action.type === "undo" && action.undo_of)
-    original = await actions(db).findOne({ _id: action.undo_of });
   const target_item =
     action.params.item_id ?? original?.params.item_id ?? item_id;
   const name = (await itemName(db, target_item)) ?? "That item";
@@ -1199,7 +1377,9 @@ export async function verifyChain(
 ): Promise<{ ok: boolean; entries: number; broken_at: number | null }> {
   const cursor = db
     .collection<AnyDoc>("audit")
-    .find({ shop_id: SHOP_ID }, { sort: { seq: 1 } });
+    .find({ shop_id: SHOP_ID }, { sort: { seq: 1 }, batchSize: 5000 });
+  const ctlP = db.collection<AnyDoc>("control").findOne({ _id: SHOP_ID });
+  ctlP.catch(() => {});
   let prev = "genesis";
   let expectSeq = 1;
   let entries = 0;
@@ -1220,7 +1400,7 @@ export async function verifyChain(
     prev = e.hash;
     expectSeq++;
   }
-  const ctl = await db.collection<AnyDoc>("control").findOne({ _id: SHOP_ID });
+  const ctl = await ctlP;
   if (
     ctl &&
     entries > 0 &&
@@ -1243,7 +1423,7 @@ export async function getRecord(
         { sort: { created_at: -1 } },
       );
   if (!action) return null;
-  const [audit, ident, chain] = await Promise.all([
+  const [audit, ident, chain, item_name] = await Promise.all([
     db
       .collection<AnyDoc>("audit")
       .find(
@@ -1253,17 +1433,20 @@ export async function getRecord(
       .toArray(),
     getIdentity(db, action.actor.human_id),
     verifyChain(db),
+    (async () => {
+      let item_id = action.params.item_id ?? null;
+      if (!item_id && action.undo_of)
+        item_id =
+          (await actions(db).findOne({ _id: action.undo_of }))?.params
+            .item_id ?? null;
+      return itemName(db, item_id);
+    })(),
   ]);
-  let item_id = action.params.item_id ?? null;
-  if (!item_id && action.undo_of)
-    item_id =
-      (await actions(db).findOne({ _id: action.undo_of }))?.params.item_id ??
-      null;
   return {
     action: toPlain(action),
     audit: audit as AuditEntry[],
     speaker_name: ident?.name ?? action.actor.human_id,
-    item_name: await itemName(db, item_id),
+    item_name,
     chain,
   };
 }

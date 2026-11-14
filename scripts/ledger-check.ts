@@ -76,30 +76,35 @@ async function main() {
     // 1. owner promo: propose, allow, publish
     const before = await targets(db, "item_coffee");
     const steps: string[] = [];
-    let a = await propose(
-      db,
-      marie,
-      "start_promo",
-      {
+    const t0 = Date.now();
+    let a = await L.proposeDecided(db, {
+      run_id: `run_check_${Date.now()}`,
+      type: "start_promo",
+      actor: marie,
+      utterance: { text: "Two-for-one coffee until noon", lang: "en", stt: "typed" },
+      evidence: [],
+      params: {
         item_id: "item_coffee",
         discount_pct: 50,
         text_en: "2 for 1 until noon",
         text_fr: "2 pour 1 jusqu'à midi",
         ends_at: "12:00",
       },
-      "Two-for-one coffee until noon",
-    );
-    a = await L.recordDecision(db, a._id, {
-      decision: "allow",
-      rule_id: "owner_promos",
-      version: 1,
-      reason: "Owners may run promos up to 50% off.",
+      decision: {
+        decision: "allow",
+        rule_id: "owner_promos",
+        version: 1,
+        reason: "Owners may run promos up to 50% off.",
+      },      begin: true,
     });
+    check("proposeDecided with begin -> applying", a.status === "applying" && a.targets.every((t) => t.previous !== null), `status=${a.status}`);
+    const tPropose = Date.now() - t0;
     a = await L.publish(db, a._id, {
       onStep: (s) => {
         steps.push(s.label);
       },
     });
+    console.log(`TIME  propose+decide+publish of one promo: ${Date.now() - t0} ms (proposeDecided ${tPropose} ms)`);
     const after = await targets(db, "item_coffee");
     check(
       "promo published and verified",
@@ -419,6 +424,34 @@ async function main() {
         `code=${e.code} ${d.slice(0, 300)}`,
       );
     }
+
+    // 8b. warm timing: one mark_sold_out, proposed -> verified
+    {
+      const t1 = Date.now();
+      const marks: string[] = [];
+      let w = await L.proposeDecided(db, {
+        run_id: `run_check_${Date.now()}`,
+        type: "mark_sold_out",
+        actor: sam,
+        utterance: { text: "We're out of lattes", lang: "en", stt: "typed" },
+        evidence: [],
+        params: { item_id: "item_latte" },
+        decision: { decision: "allow", rule_id: "staff_stock", version: 1, reason: "Staff may mark items sold out or available." },
+        begin: true,
+      });
+      marks.push(`proposed+begin ${Date.now() - t1}`);
+      w = await L.publish(db, w._id, { onStep: (s) => { marks.push(`${s.label} ${Date.now() - t1}`); } });
+      const total = Date.now() - t1;
+      console.log(`TIME  warm mark_sold_out proposed->verified: ${total} ms  [${marks.join(" | ")}]`);
+      const lt = await targets(db, "item_latte");
+      check("warm mark_sold_out verified", w.status === "verified" && lt.sign.sold_out === true && lt.till.available === false);
+    }
+
+    // 9. stale chain head (another writer reset control): one re-read, chain stays valid
+    await seed(db, true, () => {});
+    await L.auditEvent(db, { event: "check.stale_head", actor: marie, detail: {} });
+    const c3 = await L.verifyChain(db);
+    check("stale chain head recovered", c3.ok && c3.entries === 1, `entries=${c3.entries} broken_at=${c3.broken_at}`);
 
     await seed(db, true, () => {});
   } finally {

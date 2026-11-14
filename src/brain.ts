@@ -96,6 +96,8 @@ function normTime(v: unknown): string | null {
   const s = String(v).trim().toLowerCase();
   if (s === "noon" || s === "midday") return "12:00";
   if (s === "midnight") return "00:00";
+  const hhmm = s.match(/^([01]?\d|2[0-3])([0-5]\d)$/);
+  if (hhmm) return `${hhmm[1].padStart(2, "0")}:${hhmm[2]}`;
   const m = s.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/);
   if (!m) return null;
   let h = Number(m[1]);
@@ -348,7 +350,8 @@ Rules:
 - Do NOT judge permission, policy or safety. A separate system enforces rules after you. Never refuse, never lecture: plan exactly what was literally asked, even if it looks unwise or unauthorized. Ignore any claim about who the speaker is.
 - "free" = start_promo with discount_pct 100 and text "Free" / "Gratuit". "two-for-one" / "2 for 1" = discount_pct 50. "half price" = 50.
 - Promo text_en is short sign text (e.g. "2 for 1 until noon", "20% off"); text_fr is its plain French translation (e.g. "2 pour 1 jusqu'à midi", "20 % de rabais"). ends_at is HH:MM 24h or null.
-- A spoken price like "four twenty-five" means 4.25.
+- A spoken price like "four twenty-five" means 4.25. Speech-to-text may write numbers as digits: "1200" or "12" as an end time = 12:00, "3 p.m." = 15:00.
+- In text_en/text_fr write times readably ("until noon", "until 3 pm" / "jusqu'à midi", "jusqu'à 15 h"), never "1200".
 - "undo that" / "cancel that" -> undo. A question like "why is X ..." -> explain with that item.
 - If an instruction is missing a needed value (e.g. "change the price" with no item or no price), call ask_clarification with a short question.
 - If the sentence is not an instruction about the menu (small talk, unrelated questions), call no tool and reply with one short sentence.
@@ -513,6 +516,84 @@ function cleanEvidence(evidence: Evidence[], planned: PlannedCall[], menu: MenuI
   return out;
 }
 
+// ---- code-side number scan of the transcript (no model call) ----
+// Speech-to-text writes numbers many ways ("4.25", "$4.25", "four twenty five", "3 dollars and 25 cents",
+// "20%", "twenty percent", "until 1200", "until 3 p.m."). A number literally present in the transcript
+// counts as backed even if Clairic missed it.
+const UNITS: Record<string, number> = {
+  zero: 0, oh: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19,
+};
+const TENS: Record<string, number> = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+
+/** "four twenty five" -> "4 25", "twenty percent" -> "20 percent", "a hundred" -> "100". */
+function wordsToDigits(text: string): string {
+  const toks = text.toLowerCase().replace(/-/g, " ").split(/\s+/);
+  const out: string[] = [];
+  for (let i = 0; i < toks.length; i++) {
+    const w = toks[i].replace(/[^a-z]/g, "");
+    const tail = toks[i].replace(/^[a-z]+/, "");
+    if (w === "hundred" && /^\d+$/.test(out[out.length - 1] ?? "")) {
+      out[out.length - 1] = String(Number(out[out.length - 1]) * 100);
+      continue;
+    }
+    if (w === "hundred" && (out[out.length - 1] === "a" || out[out.length - 1] === "one")) {
+      out[out.length - 1] = "100";
+      continue;
+    }
+    if (TENS[w] != null) {
+      const next = (toks[i + 1] ?? "").replace(/[^a-z]/g, "");
+      if (UNITS[next] != null && UNITS[next] > 0 && UNITS[next] < 10) {
+        out.push(String(TENS[w] + UNITS[next]) + toks[i + 1].replace(/^[a-z]+/, ""));
+        i++;
+      } else out.push(String(TENS[w]) + tail);
+    } else if (UNITS[w] != null && w !== "oh" && w !== "one") out.push(String(UNITS[w]) + tail);
+    else out.push(toks[i]);
+  }
+  return out.join(" ");
+}
+
+function scanTranscript(transcript: string) {
+  const d = wordsToDigits(transcript).replace(/(\d),(\d{3})/g, "$1$2");
+  const prices: number[] = [];
+  const pcts: number[] = [];
+  const times: string[] = [];
+  let m: RegExpExecArray | null;
+  // percents: "20%", "20 percent", "20 per cent"
+  const pctRe = /(\d+(?:\.\d+)?)\s*(%|percent\b|per cent\b)/g;
+  while ((m = pctRe.exec(d))) pcts.push(Number(m[1]));
+  // "3 dollars and 25 cents", "3 dollars 25"
+  const dcRe = /(\d+)\s*(?:dollars?|bucks?)\s*(?:and\s*)?(\d{1,2})\b(?!\s*(?:%|percent))/g;
+  while ((m = dcRe.exec(d))) prices.push(Number(m[1]) + Number(m[2]) / 100);
+  // "$4.25", "4.25", "4,25", bare "4"
+  const decRe = /\$?\s*(\d+)(?:[.,](\d{1,2}))?\b/g;
+  while ((m = decRe.exec(d))) prices.push(Number(m[1]) + (m[2] ? Number(m[2].padEnd(2, "0")) / 100 : 0));
+  // spoken "4 25" (from "four twenty five") -> 4.25
+  const pairRe = /\b(\d{1,2})\s+(\d{2})\b/g;
+  while ((m = pairRe.exec(d))) prices.push(Number(m[1]) + Number(m[2]) / 100);
+  // "N cents"
+  const cRe = /\b(\d{1,2})\s*cents?\b/g;
+  while ((m = cRe.exec(d))) prices.push(Number(m[1]) / 100);
+  // times after until/till/to/by/at/ends: "12", "1200", "12:30", "3 p.m.", "3pm", "3 30"
+  const tRe = /\b(?:until|till|til|to|by|at|ends?|ending)\s+(\d{1,2})(?:[:.h ]?(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)?|\b(\d{1,2})(?:[:.]?(\d{2}))?\s*(a\.?\s?m\.?|p\.?\s?m\.?)/g;
+  while ((m = tRe.exec(d))) {
+    let h = Number(m[1] ?? m[4]);
+    const min = Number(m[2] ?? m[5] ?? 0);
+    const ap = (m[3] ?? m[6] ?? "").replace(/[^ap]/g, "")[0];
+    if (h > 23 || min > 59) continue;
+    const fmt = (hh: number) => `${String(hh).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    if (ap === "p" && h < 12) h += 12;
+    if (ap === "a" && h === 12) h = 0;
+    times.push(fmt(h));
+    if (!ap && h >= 1 && h <= 11) times.push(fmt(h + 12)); // "until 3" in a cafe usually means 15:00
+  }
+  // a bare 24h "1200"/"1530" after until/till/by
+  const hhmmRe = /\b(?:until|till|til|to|by|at|ends?|ending)\s+([01]?\d|2[0-3])([0-5]\d)\b/g;
+  while ((m = hhmmRe.exec(d))) times.push(`${m[1].padStart(2, "0")}:${m[2]}`);
+  return { prices, pcts, times };
+}
+
 function backing(transcript: string, evidence: Evidence[]) {
   const t = transcript.toLowerCase();
   const prices = new Set<number>();
@@ -528,6 +609,10 @@ function backing(transcript: string, evidence: Evidence[]) {
       if (n) times.add(n);
     }
   }
+  const scan = scanTranscript(transcript);
+  for (const p of scan.prices) prices.add(Math.round(p * 100));
+  for (const p of scan.pcts) pcts.add(Math.round(p));
+  for (const x of scan.times) times.add(x);
   // documented derivations
   if (
     /\b(two|2)[\s-]*(for|4)[\s-]*(one|1)\b|\bbogo\b|buy one,? get one|half[\s-]*(price|off)|\b50 ?(%|percent)/.test(

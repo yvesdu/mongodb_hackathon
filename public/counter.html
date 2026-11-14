@@ -272,7 +272,7 @@
         align-items: baseline;
         gap: 10px;
       }
-      .trace-head .q {
+      .trace-head .q { min-width: 0; flex: 1; text-align: right;
         color: var(--dim);
         font-size: 13px;
         overflow: hidden;
@@ -504,6 +504,15 @@
           width: 100%;
         }
       }
+      /* narrow (stage iframe) safety */
+      html, body { overflow-x: hidden; }
+      .wrap > * { min-width: 0; }
+      .step { max-width: min(280px, 100%); }
+      .trace-head { min-width: 0; }
+      .owner-qr { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+      .owner-qr[hidden] { display: none; }
+      .qrbox { background: #fff; padding: 6px; border-radius: 8px; width: 120px; height: 120px; }
+      .qrbox svg { width: 100%; height: 100%; display: block; }
     </style>
   </head>
   <body>
@@ -609,11 +618,16 @@
         </div>
       </section>
 
+      <section class="panel owner-qr" id="ownerQr" hidden>
+        <div><h2>Owner's phone</h2><div class="hint">Scan to open approvals</div><a id="ownerLink" target="_blank" class="hint">open link</a></div>
+        <div class="qrbox" id="ownerQrCode"></div>
+      </section>
       <div class="links" id="links"></div>
     </div>
 
     <audio id="earcon" preload="auto"></audio>
     <audio id="voice"></audio>
+    <script src="/vendor/qrcode.js"></script>
     <script src="/app.js"></script>
     <script>
       (function () {
@@ -741,6 +755,52 @@
           }
         }
 
+        // Speak a reply: earcon first while the TTS audio is fetched.
+        var spoken = {}; // run_id|say already spoken (own replies + pushed traces)
+        var primed = false; // first pushed trace is history: never spoken
+        async function announce(kind, say) {
+          if (YC.MOCK) {
+            await playEarcon(kind);
+            await speak(say);
+            return;
+          }
+          var ttsP = say
+            ? YC.api("/api/tts", { json: { text: say }, raw: true })
+                .then(function (r) { return r.ok ? r.blob() : null; })
+                .catch(function () { return null; })
+            : Promise.resolve(null);
+          await playEarcon(kind);
+          var blob = await ttsP;
+          if (blob) {
+            var v = $("voice");
+            v.src = URL.createObjectURL(blob);
+            v.play().catch(function (e) { console.warn(e); });
+          } else if (say && "speechSynthesis" in window)
+            speechSynthesis.speak(new SpeechSynthesisUtterance(say));
+        }
+        function traceKind(t) {
+          var st = (t.steps || []).map(function (x) { return x.status; }).filter(function (x) { return x !== "info"; });
+          var last = st[st.length - 1];
+          if (last === "blocked" || last === "fail") return "blocked";
+          if (last === "held") return "held";
+          return "ok";
+        }
+        // A finished run this page did not start (e.g. the owner approved on a phone): speak it once.
+        function maybeSpeakTrace(t) {
+          if (!primed) {
+            primed = true; // whatever trace is there on first load is history
+            if (t && t.done && t.say) spoken[(t.run_id || "") + "|" + t.say] = true;
+            return;
+          }
+          if (!t || !t.done || !t.say) return;
+          var k = (t.run_id || "") + "|" + t.say;
+          if (spoken[k] || busy) return; // while our own utterance is in flight its reply is spoken from the response
+          spoken[k] = true;
+          $("say").textContent = t.say;
+          $("say").className = "say " + traceKind(t);
+          announce(traceKind(t), t.say);
+        }
+
         async function send(text, stt) {
           text = (text || "").trim();
           if (!text) return;
@@ -757,37 +817,14 @@
             var kind = classify(res);
             $("say").textContent = res.say || "";
             $("say").className = "say " + kind;
-            // earcon first, while the reply audio is being fetched
-            if (YC.MOCK) {
-              await playEarcon(kind);
-              await speak(res.say);
-            } else {
-              var ttsP = YC.api("/api/tts", {
-                json: { text: res.say || "" },
-                raw: true,
-              })
-                .then(function (r) {
-                  return r.ok ? r.blob() : null;
-                })
-                .catch(function () {
-                  return null;
-                });
-              await playEarcon(kind);
-              var blob = await ttsP;
-              if (blob) {
-                var v = $("voice");
-                v.src = URL.createObjectURL(blob);
-                v.play().catch(function (e) {
-                  console.warn(e);
-                });
-              } else if (res.say && "speechSynthesis" in window)
-                speechSynthesis.speak(new SpeechSynthesisUtterance(res.say));
-            }
+            spoken[(res.run_id || "") + "|" + (res.say || "")] = true;
+            await announce(kind, res.say);
           } catch (e) {
             $("err").textContent = "Utterance failed: " + e.message;
           } finally {
             busy = false;
             $("mic").classList.remove("busy");
+            if (state && state.trace) maybeSpeakTrace(state.trace);
           }
         }
 
@@ -955,6 +992,7 @@
         var prevTill = {};
         function render(s) {
           state = s;
+          maybeSpeakTrace(s.trace);
           document.body.classList.toggle("is-halted", !!s.halted);
           $("halt").hidden = !!s.halted;
           $("resume").hidden = !s.halted;
@@ -1049,6 +1087,22 @@
                 })
                 .join("")
             : '<div class="empty">Nothing waiting.</div>';
+        }
+
+        var ownerKey = YC.qs.get("owner");
+        if (ownerKey) {
+          YC.config().then(function (c) {
+            if (!c.public_url) return;
+            var url = c.public_url + "/approve?key=" + encodeURIComponent(ownerKey);
+            try {
+              var qr = qrcode(0, "M");
+              qr.addData(url);
+              qr.make();
+              $("ownerQrCode").innerHTML = qr.createSvgTag({ cellSize: 3, margin: 0, scalable: true });
+            } catch (e) { console.warn("owner QR failed", e); }
+            $("ownerLink").href = url;
+            $("ownerQr").hidden = false;
+          });
         }
 
         YC.connect(render, function (st) {

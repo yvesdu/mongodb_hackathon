@@ -27,6 +27,7 @@ export default {
         if (path === "/api/state") return json(await (await shop()).refresh());
         if (path === "/api/record") return json(await (await shop()).record(url.searchParams.get("action_id")));
         if (path === "/api/actions") return json(await (await shop()).actions(Number(url.searchParams.get("limit") ?? 20)));
+        if (path === "/api/config" && !post) return json(await (await shop()).config());
         if (path === "/api/chain") return json(await (await shop()).chain());
 
         // Speech out carries no authority, so it needs no key.
@@ -50,6 +51,11 @@ export default {
           if (!isCounter) return json({ error: "counter key required" }, 401);
           const body = (await request.json()) as { halt: boolean; human_id?: string };
           return json(await (await shop()).halt(body));
+        }
+
+        if (path === "/api/config" && post) {
+          if (!isCounter) return json({ error: "counter key required" }, 401);
+          return json(await (await shop()).config((await request.json()) as { public_url?: string | null; slow?: boolean }));
         }
 
         // Approving a held request needs the owner's key (stands in for the owner's device login).

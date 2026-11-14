@@ -47,6 +47,7 @@
         if (qs.get("mock")) pass.set("mock", qs.get("mock"));
         var signQ = pass.toString();
         if (qs.get("key")) pass.set("key", qs.get("key"));
+        if (qs.get("owner")) pass.set("owner", qs.get("owner"));
         var counterQ = pass.toString();
         document.getElementById("sign").src =
           "/sign" + (signQ ? "?" + signQ : "");
