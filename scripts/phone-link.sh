@@ -9,4 +9,5 @@ curl -s -X POST http://127.0.0.1:8787/api/config -H "x-key: $CK" -H "content-typ
 echo
 echo "Menu for phones:      http://$LAN:8787/menu"
 echo "Owner's approve page: http://$LAN:8787/approve?key=$OK"
-echo "Stage (this laptop):  http://127.0.0.1:8787/stage?key=$CK&owner=$OK"
+echo "Sign, the product (this laptop):    http://127.0.0.1:8787/sign"
+echo "Counter, the control (this laptop): http://127.0.0.1:8787/counter?key=$CK"

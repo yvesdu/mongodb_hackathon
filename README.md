@@ -54,7 +54,7 @@ Everything in `src/`, `public/`, `scripts/` and `test/`:
 - `src/orchestrator.ts`: the order of operations for one sentence
 - `src/agent.ts`: one agent per shop holding the change stream, the live push to screens and the direct-edit watcher
 - `src/voice.ts`: speech in and out
-- `public/`: the counter, the sign, the online menu, the owner's approve page, the record page and the stage view
+- `public/`: the sign, the counter, the online menu, the owner's phone page and the record page
 - `scripts/`: validators, seed and reset, and an end-to-end check against Atlas
 
 ## What is off the shelf
@@ -85,7 +85,7 @@ npm test                    # gate unit tests
 npm run attack              # eight injection attempts against the running server; none may publish
 ```
 
-Pages: `/stage?key=<COUNTER_KEY>` (sign plus counter), `/sign`, `/menu`, `/approve?key=<OWNER_KEY>`, `/record`.
+Pages: `/sign` (the product: what customers see), `/counter?key=<COUNTER_KEY>` (the control: what staff use), `/menu` (customers' phones), `/approve?key=<OWNER_KEY>` (the owner's phone), `/record` (one action traced for a reviewer).
 
 ## Things to try
 

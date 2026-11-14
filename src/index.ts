@@ -72,6 +72,9 @@ export default {
         return json({ error: "not found" }, 404);
       }
 
+      // The root shows the product.
+      if (path === "/") return Response.redirect(new URL("/sign", url).toString(), 302);
+
       // WebSocket and HTTP traffic addressed to the agent itself (/agents/yes-chef-agent/<shop>)
       return (await routeAgentRequest(request, env)) ?? new Response("Not found", { status: 404 });
     } catch (err: any) {
