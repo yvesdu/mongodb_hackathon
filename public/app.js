@@ -493,7 +493,7 @@
       } else if (g.decision === "needs_approval") {
         step({
           key: "gate",
-          label: "Held for owner: " + describe(c),
+          label: "Held for the owner: " + describe(c),
           status: "held",
           detail: g.rule + " · " + g.reason,
         });
@@ -557,7 +557,7 @@
     var anyOk = results.some(function (r) {
       return r.status === "verified";
     });
-    trace.say = (anyOk ? "Yes, chef. " : "") + says.join(" ");
+    trace.say = (anyOk ? "Yes, chef. " : "") + says.filter(function (x, i) { return says.indexOf(x) === i; }).join(" ");
     trace.done = true;
     s = clone(mockState);
     s.trace = clone(trace);

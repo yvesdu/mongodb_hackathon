@@ -16,70 +16,74 @@
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; overflow: hidden; }
-  body { background: var(--bg); color: var(--ink); font: 16px/1.4 var(--sans); }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.45 var(--sans); }
   button, input { font: inherit; color: inherit; }
-  .wrap { height: 100vh; max-width: 900px; margin: 0 auto; padding: 14px 20px; display: flex; flex-direction: column; }
+  .link { background: none; border: 0; padding: 0; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: 15px; }
+  .link:hover { color: var(--ink); }
+
+  .wrap { height: 100vh; max-width: 560px; margin: 0 auto; padding: 28px 20px 18px; display: flex; flex-direction: column; gap: 22px; }
   .wrap > * { flex: none; }
-  .sec { border-top: 1px solid var(--line); padding: 12px 0; }
 
-  .top { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; }
-  .title { font-weight: 700; font-size: 17px; }
-  .conn { font-size: 15px; color: var(--muted); }
-  .conn.offline { color: var(--no); }
-  .halt-banner { display: none; color: var(--no); font-weight: 700; font-size: 16px; padding-bottom: 10px; }
-  body.is-halted .halt-banner { display: block; }
+  .conn { position: fixed; top: 10px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+  .conn.live { background: var(--ok); } .conn.mock { background: var(--accent); } .conn.offline { background: var(--no); }
 
-  .who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .seg { display: flex; gap: 8px; }
-  .seg button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 16px; }
+  .who { text-align: center; }
+  .who .label { font-size: 15px; color: var(--muted); margin-bottom: 8px; }
+  .seg { display: inline-flex; gap: 8px; }
+  .seg button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 16px; cursor: pointer; font-size: 16px; }
   .seg button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); font-weight: 700; }
-  .caption { font-size: 15px; color: var(--muted); }
   .osess { font-size: 15px; margin-top: 8px; }
   .osess.on { color: var(--ok); }
   .osess.on::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 8px; vertical-align: middle; }
   .osess.off { color: var(--held); }
 
-  .talk { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center; }
-  .mic { width: 112px; height: 112px; border-radius: 50%; border: 0; background: var(--accent); color: var(--ink); font-weight: 700; font-size: 17px; line-height: 1.2;
+  .talk { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .mic { width: 140px; height: 140px; border-radius: 50%; border: 0; background: var(--accent); color: var(--ink); font-weight: 700; font-size: 19px; line-height: 1.2;
          cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
   .mic small { display: block; font-weight: 400; font-size: 15px; }
   .mic.rec { background: var(--ink); color: var(--bg); }
   .mic.busy { opacity: 0.6; }
-  .talk-right { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-  .heard { font-size: 15px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .say { font-family: var(--serif); font-weight: 500; font-size: 22px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-  .say.ok { color: var(--ok); } .say.blocked { color: var(--no); } .say.held { color: var(--held); }
-  .typed { display: flex; gap: 8px; }
+  .heard { font-size: 15px; color: var(--muted); max-width: 100%; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .heard:empty { display: none; }
+  .say { font-family: var(--serif); font-weight: 500; font-size: 26px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .say:empty { display: none; }
+  .say.blocked { color: var(--no); } .say.held { color: var(--held); }
+  .typed { display: flex; gap: 8px; width: 100%; }
+  .typed[hidden] { display: none; }
   .typed input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 16px; background: var(--bg); }
   .typed button { border: 1px solid var(--ink); background: var(--bg); border-radius: 6px; padding: 8px 14px; cursor: pointer; }
   .err { color: var(--no); font-size: 15px; }
   .err:empty { display: none; }
 
-  .trace { flex: 1 1 auto; min-height: 80px; display: flex; flex-direction: column; }
-  .trace-head { font-size: 15px; color: var(--muted); padding-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .trace-head b { color: var(--ink); }
-  .steps { list-style: none; padding: 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-  .step { display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 10px; padding: 3px 0; font-size: 16px; }
-  .step .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); margin-top: 8px; }
-  .step.ok .dot { background: var(--ok); } .step.blocked .dot, .step.fail .dot { background: var(--no); } .step.held .dot { background: var(--held); }
-  .step.blocked b, .step.fail b { color: var(--no); } .step.held b { color: var(--held); }
-  .step .d { color: var(--muted); font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .step.working { color: var(--muted); }
+  .what { flex: 1 1 auto; min-height: 60px; display: flex; flex-direction: column; border-top: 1px solid var(--line); padding-top: 14px; }
+  .what-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .lines, .steps { list-style: none; padding: 0; }
+  .line, .step { display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 10px; padding: 2px 0; font-size: 15px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); margin-top: 7px; }
+  .ok .dot { background: var(--ok); } .blocked .dot, .fail .dot { background: var(--no); } .held .dot { background: var(--held); }
+  .line.blocked, .line.fail { color: var(--no); } .line.held { color: var(--held); }
+  .steps { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .steps[hidden] { display: none; }
+  .step b { font-weight: 600; }
+  .step .d { color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .step.working, .line.working { color: var(--muted); }
   .empty { color: var(--muted); font-size: 15px; }
+  .what-foot { padding-top: 6px; }
 
-  .footbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; }
-  .kill-btn { background: var(--bg); border: 2px solid var(--no); color: var(--no); font-weight: 700; border-radius: 6px; padding: 7px 18px; cursor: pointer; }
-  .resume-btn { background: var(--ink); border: 2px solid var(--ink); color: var(--bg); font-weight: 700; border-radius: 6px; padding: 7px 18px; cursor: pointer; }
-  .slow { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; cursor: pointer; }
-  .slow input { width: 16px; height: 16px; accent-color: var(--ink); }
-  .drawer-btn { margin-left: auto; background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; cursor: pointer; font-size: 15px; }
-  .drawer-btn.has { font-weight: 700; color: var(--held); }
+  .footbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .stopped { display: none; color: var(--no); font-weight: 700; font-size: 15px; width: 100%; }
+  body.is-halted .stopped { display: block; }
+  .kill-btn { background: var(--bg); border: 2px solid var(--no); color: var(--no); font-weight: 700; border-radius: 6px; padding: 8px 22px; cursor: pointer; }
+  .resume-btn { background: var(--ink); border: 2px solid var(--ink); color: var(--bg); font-weight: 700; border-radius: 6px; padding: 8px 22px; cursor: pointer; }
+  .drawer-btn.has { color: var(--held); font-weight: 700; }
 
-  .drawer { position: fixed; left: 20px; right: 20px; bottom: 64px; max-height: calc(100vh - 130px); overflow-y: auto; z-index: 30;
+  .drawer { position: fixed; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 24px)); bottom: 64px; max-height: calc(100vh - 110px); overflow-y: auto; z-index: 30;
             background: var(--bg); border: 1px solid var(--ink); border-radius: 6px; padding: 14px 18px; }
   .drawer[hidden] { display: none; }
   .drawer h2 { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
   .drawer .part + .part { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+  .slow { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+  .slow input { width: 16px; height: 16px; accent-color: var(--ink); }
   table { width: 100%; border-collapse: collapse; font-size: 15px; }
   td, th { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--line); }
   th { color: var(--muted); font-weight: 400; }
@@ -97,59 +101,47 @@
   .qrbox svg { width: 100%; height: 100%; display: block; }
   .links { font-size: 15px; color: var(--muted); }
   .links a { color: var(--ink); }
-
-  @media (max-width: 520px) {
-    .wrap { padding: 10px 12px; }
-    .mic { width: 96px; height: 96px; font-size: 16px; }
-  }
+  @media (max-height: 640px) { .mic { width: 112px; height: 112px; } .wrap { gap: 14px; padding-top: 16px; } }
 </style>
 </head>
 <body>
+<span class="conn" id="conn" title="connecting"></span>
 <div class="wrap">
-  <div class="top">
-    <div class="title">Yes Chef · counter (staff)</div>
-    <div class="conn" id="conn">connecting</div>
-  </div>
-  <div class="halt-banner" role="alert">Stopped. Nothing will be published until updates resume.</div>
-
-  <section class="sec">
-    <div class="who">
-      <div class="seg" role="group" aria-label="Speaker">
-        <button type="button" data-human="usr_marie" aria-pressed="true">Marie · owner</button>
-        <button type="button" data-human="usr_sam" aria-pressed="false">Sam · employee</button>
-      </div>
-      <span class="caption">Who is speaking (a claim, not proof)</span>
+  <section class="who" title="Who is speaking: a claim, not proof. Owner authority comes only from Marie's own device.">
+    <div class="label">Speaking as</div>
+    <div class="seg" role="group" aria-label="Speaking as">
+      <button type="button" data-human="usr_marie" aria-pressed="true">Marie · owner</button>
+      <button type="button" data-human="usr_sam" aria-pressed="false">Sam · employee</button>
     </div>
-    <div class="osess off" id="osess">Marie is not checked in. Owner requests go to her phone.</div>
+    <div class="osess off" id="osess">Marie is not checked in</div>
   </section>
 
-  <section class="sec">
-    <div class="talk">
-      <button class="mic" id="mic" type="button" aria-label="Hold to talk">Hold to talk<small>or hold space</small></button>
-      <div class="talk-right">
-        <div class="heard" id="heard">Nothing heard yet.</div>
-        <div class="say" id="say"></div>
-        <form class="typed" id="typed">
-          <input id="typedText" type="text" autocomplete="off" placeholder="Or type it: we're out of croissants" aria-label="Type a command">
-          <button type="submit">Send</button>
-        </form>
-        <div class="err" id="err"></div>
-      </div>
-    </div>
+  <section class="talk">
+    <button class="mic" id="mic" type="button" aria-label="Hold to talk">Hold to talk<small>or hold space</small></button>
+    <div class="heard" id="heard"></div>
+    <div class="say" id="say"></div>
+    <form class="typed" id="typed" hidden>
+      <input id="typedText" type="text" autocomplete="off" placeholder="We're out of croissants" aria-label="Type a command">
+      <button type="submit">Send</button>
+    </form>
+    <button class="link" id="typeToggle" type="button">Type instead</button>
+    <div class="err" id="err"></div>
   </section>
 
-  <section class="sec trace">
-    <div class="trace-head" id="traceq">Live trace</div>
-    <ol class="steps" id="steps"><li class="empty">No run yet.</li></ol>
+  <section class="what" aria-label="What happened">
+    <div class="what-body" id="whatBody">
+      <ul class="lines" id="summary"><li class="empty">Nothing yet.</li></ul>
+      <ol class="steps" id="steps" hidden><li class="empty">No run yet.</li></ol>
+    </div>
+    <div class="what-foot"><button class="link" id="stepsToggle" type="button">Show every step</button></div>
+    <div id="traceq" hidden></div>
   </section>
 
   <div class="footbar">
+    <div class="stopped" role="alert">Updates are stopped</div>
     <button class="kill-btn" id="halt" type="button" title="Stops publishing immediately; a run in progress is rolled back">Stop</button>
-    <button class="resume-btn" id="resume" type="button" hidden>Resume updates</button>
-    <label class="slow" title="Adds a pause between sign, menu and till so the stop switch can be shown mid-run">
-      <input type="checkbox" id="slow" disabled> Slow mode (pause between targets)
-    </label>
-    <button class="drawer-btn" id="drawerBtn" type="button" aria-expanded="false" aria-controls="drawer">Till and approvals (<span id="pendCount">0</span>)</button>
+    <button class="resume-btn" id="resume" type="button" hidden>Resume</button>
+    <button class="link drawer-btn" id="drawerBtn" type="button" aria-expanded="false" aria-controls="drawer">More</button>
   </div>
 </div>
 
@@ -159,14 +151,17 @@
     <div id="pending"><div class="empty">Nothing waiting.</div></div>
   </div>
   <div class="part">
+    <label class="slow" title="Adds a pause between sign, menu and till so the stop switch can be shown mid-run">
+      <input type="checkbox" id="slow" disabled> Slow mode: pause between targets (for showing the stop switch)
+    </label>
+    <div class="hint" id="haltHint">Stop halts publishing immediately; any run in progress is rolled back.</div>
+  </div>
+  <div class="part">
     <h2>Till</h2>
     <table>
       <thead><tr><th>Item</th><th>Price</th><th>Status</th><th>Discount</th></tr></thead>
       <tbody id="till"></tbody>
     </table>
-  </div>
-  <div class="part">
-    <div class="hint" id="haltHint">Stop halts publishing immediately; any run in progress is rolled back.</div>
   </div>
   <div class="part owner-qr" id="ownerQr" hidden>
     <div><h2>Owner's phone</h2><div class="hint">Scan to open approvals</div><a id="ownerLink" target="_blank" class="hint">Open link</a></div>
@@ -540,14 +535,103 @@
           note: "note",
         };
         var prevTill = {};
+        // ---------- "What happened": a short summary built from trace steps
+        var lastTraceKey = null;
+        var TWORD = { ok: "Allowed", blocked: "Blocked", held: "Held for the owner" };
+        function joinList(a) {
+          return a.length <= 1 ? a.join("") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+        }
+        function summarize(t) {
+          var out = [], gates = {}, current = null, pubs = [];
+          function flushPub() {
+            if (current && current.targets.length) pubs.push(current);
+            current = null;
+          }
+          (t.steps || []).forEach(function (st) {
+            var label = st.label || "", detail = st.detail || "";
+            if (st.key === "heard") { out.push({ status: "info", text: label }); return; }
+            if (st.key === "extracted" || st.key === "planned") return;
+            if (st.key === "gate") {
+              flushPub();
+              var m = label.match(/^(Allowed|Blocked|Held for the owner):\s*(.*)$/);
+              if (!m) { out.push({ status: st.status, text: label }); return; }
+              var rule = detail.split(" · ")[0];
+              var k = st.status + "|" + (st.status === "blocked" ? detail : rule);
+              if (!gates[k]) {
+                gates[k] = { status: st.status, word: TWORD[st.status] || m[1], rule: rule, detail: detail, whats: [] };
+                out.push(gates[k]);
+              }
+              gates[k].whats.push(m[2]);
+              if (st.status === "ok") current = { what: m[2], targets: [], verb: "Published to", readBack: false, fail: false };
+              return;
+            }
+            if (st.key === "target") {
+              var tm = label.match(/^(.*?)\s+(updated|written|restored)$/i);
+              if (tm && current && st.status === "ok") {
+                current.targets.push(tm[1].toLowerCase());
+                if (/restored/i.test(tm[2])) current.verb = "Restored";
+                return;
+              }
+              out.push({ status: st.status, text: label });
+              return;
+            }
+            if (st.key === "verified") {
+              if (current && st.status === "ok") { current.readBack = true; flushPub(); return; }
+              out.push({ status: st.status, text: label });
+              return;
+            }
+            out.push({ status: st.status, text: label }); // notes
+          });
+          flushPub();
+          var lines = out.map(function (g) {
+            if (!g.word) return g;
+            var n = g.whats.length;
+            var text = g.word + " · " + (g.status === "blocked" ? g.detail : g.rule) + (n > 1 ? " (" + n + " actions)" : " · " + g.whats[0]);
+            return { status: g.status, text: text };
+          });
+          pubs.forEach(function (p) {
+            lines.push({ status: "ok", text: p.verb + " " + joinList(p.targets) + (p.readBack ? " · read back" : "") + (pubs.length > 1 ? " · " + p.what : "") });
+          });
+          if (!t.done) lines.push({ status: "working", text: "Working…" });
+          return lines;
+        }
+        // remembered toggles
+        function pref(k, v) {
+          try { if (v === undefined) return localStorage.getItem(k) === "1"; localStorage.setItem(k, v ? "1" : "0"); } catch (e) {}
+          return false;
+        }
+        function showTyped(on, focus) {
+          $("typed").hidden = !on;
+          $("typeToggle").textContent = on ? "Hide typing" : "Type instead";
+          if (on && focus) $("typedText").focus();
+        }
+        showTyped(pref("yc-counter-typed"), false);
+        $("typeToggle").addEventListener("click", function () {
+          var on = $("typed").hidden;
+          pref("yc-counter-typed", on);
+          showTyped(on, true);
+        });
+        function showSteps(on) {
+          $("steps").hidden = !on;
+          $("stepsToggle").textContent = on ? "Hide steps" : "Show every step";
+        }
+        showSteps(pref("yc-counter-allsteps"));
+        $("stepsToggle").addEventListener("click", function () {
+          var on = $("steps").hidden;
+          pref("yc-counter-allsteps", on);
+          showSteps(on);
+        });
+
         function drawOwnerSession() {
           var left = YC.ownerLeftMs(state), el = $("osess");
           if (left > 0) {
             el.className = "osess on";
-            el.textContent = "Marie is checked in from her device · " + YC.mmss(left) + " left";
+            el.textContent = "Marie is checked in · " + YC.mmss(left);
+            el.title = "Marie opened an owner session from her own device; requests made as Marie run as the owner.";
           } else {
             el.className = "osess off";
-            el.textContent = "Marie is not checked in. Owner requests go to her phone.";
+            el.textContent = "Marie is not checked in";
+            el.title = "Requests made as Marie here are held and sent to her phone.";
           }
         }
         setInterval(drawOwnerSession, 1000);
@@ -564,31 +648,20 @@
 
           var t = s.trace;
           if (t && t.steps) {
-            $("traceq").innerHTML =
-              "<b>" + esc(t.speaker) + "</b> (" + esc(t.role) + "): " + esc(t.text);
-            var html = t.steps
-              .map(function (st) {
-                return (
-                  '<li class="step ' + esc(st.status) + '"><span class="dot"></span><div><b>' + esc(st.label) + "</b>" +
-                  (st.detail ? '<div class="d">' + esc(st.detail) + "</div>" : "") +
-                  "</div></li>"
-                );
-              })
-              .join("");
-            if (!t.done)
-              html +=
-                '<li class="step working"><span class="dot"></span><div>Working…</div></li>';
-            var stepsEl = $("steps");
-            if (
-              stepsEl.getAttribute("data-run") !== t.run_id ||
-              stepsEl.childElementCount !== t.steps.length + (t.done ? 0 : 1) ||
-              stepsEl.getAttribute("data-done") !== String(t.done)
-            ) {
-              stepsEl.innerHTML = html;
-              stepsEl.setAttribute("data-run", t.run_id);
-              stepsEl.setAttribute("data-done", String(t.done));
-              var last = stepsEl.lastElementChild;
-              stepsEl.scrollTop = stepsEl.scrollHeight;
+            var tkey = t.run_id + "|" + t.steps.length + "|" + t.done;
+            if (tkey !== lastTraceKey) {
+              lastTraceKey = tkey;
+              $("summary").innerHTML = summarize(t).map(function (ln) {
+                return '<li class="line ' + esc(ln.status) + '"><span class="dot"></span><div>' + esc(ln.text) + "</div></li>";
+              }).join("");
+              var html = t.steps.map(function (st) {
+                return '<li class="step ' + esc(st.status) + '"><span class="dot"></span><div><b>' + esc(st.label) + "</b>" +
+                  (st.detail ? '<div class="d">' + esc(st.detail) + "</div>" : "") + "</div></li>";
+              }).join("");
+              if (!t.done) html += '<li class="step working"><span class="dot"></span><div>Working…</div></li>';
+              $("steps").innerHTML = html;
+              var wb = $("whatBody");
+              wb.scrollTop = $("steps").hidden ? 0 : wb.scrollHeight;
             }
           }
 
@@ -614,8 +687,7 @@
             .join("");
 
           var p = s.pending || [];
-          var pc = $("pendCount");
-          pc.textContent = String(p.length);
+          $("drawerBtn").textContent = p.length ? "More (" + p.length + " waiting)" : "More";
           $("drawerBtn").classList.toggle("has", p.length > 0);
           $("pending").innerHTML = p.length
             ? p
@@ -682,7 +754,7 @@
 
         YC.connect(render, function (st) {
           var c = $("conn");
-          c.textContent = st === "mock" ? "mock data" : st;
+          c.title = st === "mock" ? "mock data" : st;
           c.className = "conn " + st;
         });
       })();
