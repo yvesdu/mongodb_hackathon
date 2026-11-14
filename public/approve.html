@@ -6,128 +6,151 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Yes Chef · Approvals</title>
+    <title>Yes Chef · approvals (owner)</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
       rel="stylesheet"
     />
     <style>
       :root {
-        --bg: #12100e;
-        --card: #1c1916;
-        --line: #352f29;
-        --text: #f4efe7;
-        --dim: #a69d91;
-        --faint: #6e665c;
-        --ok: #5cc98a;
-        --no: #ef5b4f;
-        --held: #f2b544;
+        --bg: #ffffff;
+        --ink: #14213d;
+        --muted: #5b6478;
+        --line: #d8dce6;
+        --accent: #ffc93c;
+        --ok: #1f6f4a;
+        --no: #c0392b;
+        --held: #a9690f;
+        --serif: "Fraunces", Georgia, serif;
+        --sans: "Atkinson Hyperlegible", system-ui, sans-serif;
       }
       * {
         box-sizing: border-box;
+        margin: 0;
       }
       body {
-        margin: 0;
         background: var(--bg);
-        color: var(--text);
-        font-family:
-          Inter,
-          system-ui,
-          -apple-system,
-          sans-serif;
+        color: var(--ink);
+        font: 16px/1.4 var(--sans);
+      }
+      button {
+        font: inherit;
       }
       .wrap {
         max-width: 520px;
         margin: 0 auto;
-        padding: 18px 16px 40px;
+        padding: 22px 16px 80px;
       }
       h1 {
-        font-size: 22px;
-        margin: 0;
-        font-weight: 800;
+        font-family: var(--serif);
+        font-weight: 700;
+        font-size: 28px;
       }
       .sub {
-        color: var(--dim);
-        font-size: 14px;
-        margin: 2px 0 14px;
+        color: var(--muted);
+        font-size: 15px;
+        margin-top: 4px;
       }
-      .conn {
-        font-size: 12px;
-        color: var(--faint);
+      .halted {
+        display: none;
+        color: var(--no);
+        font-weight: 700;
+        margin-top: 12px;
       }
-      .card {
-        background: var(--card);
-        border: 1px solid var(--line);
-        border-left: 4px solid var(--held);
-        border-radius: 16px;
-        padding: 14px;
-        margin-bottom: 12px;
+      body.is-halted .halted {
+        display: block;
+      }
+      .block {
+        border-top: 1px solid var(--line);
+        padding: 16px 0;
+      }
+      .block:first-of-type {
+        margin-top: 16px;
+      }
+      h2 {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .msg {
+        font-size: 16px;
+      }
+      .checkin.on .msg b {
+        color: var(--ok);
+      }
+      .btn {
+        display: block;
+        width: 100%;
+        margin-top: 12px;
+        border-radius: 6px;
+        padding: 14px 10px;
+        font-size: 18px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .btn.ink {
+        background: var(--ink);
+        color: var(--bg);
+        border: 2px solid var(--ink);
+      }
+      .btn.outline {
+        background: var(--bg);
+        color: var(--ink);
+        border: 2px solid var(--ink);
+      }
+      .btn.red {
+        background: var(--bg);
+        color: var(--no);
+        border: 2px solid var(--no);
+      }
+      .btn:disabled {
+        opacity: 0.5;
+      }
+      .claim {
+        color: var(--held);
+        font-weight: 700;
+        margin-bottom: 6px;
+      }
+      .claim span {
+        display: block;
+        font-weight: 400;
       }
       .who {
-        font-size: 13px;
-        color: var(--dim);
+        font-size: 15px;
+        color: var(--muted);
       }
       .who b {
-        color: var(--text);
+        color: var(--ink);
       }
       .what {
+        font-family: var(--serif);
+        font-weight: 500;
         font-size: 22px;
-        font-weight: 800;
-        margin: 4px 0 8px;
+        margin: 4px 0;
       }
       .quote {
         font-size: 16px;
-        font-style: italic;
-        color: var(--text);
-        background: #24201c;
-        border-radius: 10px;
-        padding: 10px 12px;
       }
       .why {
-        font-size: 13px;
+        font-size: 15px;
         color: var(--held);
-        margin-top: 8px;
+        margin-top: 6px;
       }
       .btns {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 10px;
-        margin-top: 14px;
-      }
-      .btns button {
-        border: 0;
-        border-radius: 14px;
-        padding: 18px 10px;
-        font:
-          800 18px Inter,
-          sans-serif;
-        cursor: pointer;
-      }
-      .yes {
-        background: var(--ok);
-        color: #0d2417;
-      }
-      .no {
-        background: #3a1512;
-        color: #ffd5d0;
-        border: 2px solid var(--no) !important;
-      }
-      .btns button:disabled {
-        opacity: 0.5;
       }
       .empty {
-        text-align: center;
-        padding: 50px 10px;
-        color: var(--dim);
-        font-size: 18px;
+        color: var(--muted);
+        padding: 24px 0;
       }
       .empty b {
         display: block;
-        font-size: 24px;
-        color: var(--text);
-        margin-bottom: 6px;
+        color: var(--ink);
+        font-size: 18px;
       }
       .toast {
         position: fixed;
@@ -136,42 +159,19 @@
         bottom: 16px;
         max-width: 488px;
         margin: 0 auto;
-        background: var(--text);
+        background: var(--ink);
         color: var(--bg);
-        border-radius: 12px;
+        border-radius: 6px;
         padding: 12px 14px;
-        font-weight: 600;
         display: none;
       }
       .toast.show {
         display: block;
       }
-      .halted {
-        display: none;
-        background: var(--no);
-        color: #fff;
-        border-radius: 12px;
-        padding: 10px;
-        font-weight: 700;
-        margin-bottom: 12px;
-        text-align: center;
+      .conn {
+        color: var(--muted);
       }
-      body.is-halted .halted {
-        display: block;
-      }
-      .checkin { border-radius: 16px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--card); }
-  .checkin h2 { margin: 0 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
-  .checkin .msg { font-size: 16px; line-height: 1.4; }
-  .checkin.on { border-color: var(--ok); background: rgba(92, 201, 138, 0.1); }
-  .checkin.on .msg b { color: var(--ok); }
-  .checkin.off { border-color: var(--held); }
-  .checkin button { width: 100%; margin-top: 12px; border: 0; border-radius: 14px; padding: 18px 10px; font: 800 18px Inter, sans-serif; cursor: pointer; }
-  .checkin .go { background: var(--ok); color: #0d2417; }
-  .checkin .leave { background: transparent; color: var(--text); border: 2px solid var(--line); }
-  .checkin button:disabled { opacity: .5; }
-  .claim { margin: 6px 0 4px; padding: 10px 12px; border-radius: 10px; background: rgba(242, 181, 68, 0.14); border: 1px solid var(--held); color: var(--held); font-weight: 700; font-size: 15px; }
-  .claim small { display: block; font-weight: 500; color: var(--text); margin-top: 2px; }
-</style>
+    </style>
   </head>
   <body>
     <div class="wrap">
@@ -181,10 +181,9 @@
         <span class="conn" id="conn"></span>
       </div>
       <div class="halted">
-        The shop is halted. Approved changes will not publish until it is
-        cleared.
+        Updates are paused. Approved changes will not publish until they resume.
       </div>
-      <div class="checkin" id="checkin"></div>
+      <div class="block checkin" id="checkin"></div>
       <div id="list"></div>
     </div>
     <div class="toast" id="toast" role="status"></div>
@@ -208,31 +207,46 @@
           if (!isFinite(s)) return "";
           return s < 60 ? s + "s ago" : Math.round(s / 60) + " min ago";
         }
+
         // ---------- owner check-in (session from this device)
-        var lastState = null, sessionBusy = false, checkinKey = null;
+        var lastState = null,
+          sessionBusy = false,
+          checkinKey = null;
         var checkin = document.getElementById("checkin");
         function fmtClock(iso) {
           var d = new Date(iso);
-          return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          return isNaN(d)
+            ? ""
+            : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
         }
         function drawCheckin() {
           var left = YC.ownerLeftMs(lastState);
           var os = lastState && lastState.owner_session;
           var key = left > 0 ? "on|" + os.expires_at : "off";
           if (key === checkinKey) {
-            if (left > 0) document.getElementById("left").textContent = YC.mmss(left);
+            if (left > 0)
+              document.getElementById("left").textContent = YC.mmss(left);
             return;
           }
           checkinKey = key;
           if (left > 0) {
-            checkin.className = "checkin on";
-            checkin.innerHTML = '<h2>Owner check-in</h2><div class="msg"><b>Checked in</b> until ' + esc(fmtClock(os.expires_at)) +
-              ' (<span id="left">' + YC.mmss(left) + "</span> left). Requests made as you at the counter run as the owner.</div>" +
-              '<button class="leave" type="button" data-open="0"' + (sessionBusy ? " disabled" : "") + ">I've left</button>";
+            checkin.className = "block checkin on";
+            checkin.innerHTML =
+              '<h2>Owner check-in</h2><div class="msg"><b>Checked in</b> until ' +
+              esc(fmtClock(os.expires_at)) +
+              ' (<span id="left">' +
+              YC.mmss(left) +
+              "</span> left). Requests made as you at the counter run as the owner.</div>" +
+              '<button class="btn outline" type="button" data-open="0"' +
+              (sessionBusy ? " disabled" : "") +
+              ">I've left</button>";
           } else {
-            checkin.className = "checkin off";
-            checkin.innerHTML = '<h2>Owner check-in</h2><div class="msg">You are not checked in. Requests made in your name at the counter are held and sent here.</div>' +
-              '<button class="go" type="button" data-open="1"' + (sessionBusy ? " disabled" : "") + ">I'm at the counter</button>";
+            checkin.className = "block checkin off";
+            checkin.innerHTML =
+              '<h2>Owner check-in</h2><div class="msg">You are not checked in. Requests made in your name at the counter are held and sent here.</div>' +
+              '<button class="btn ink" type="button" data-open="1"' +
+              (sessionBusy ? " disabled" : "") +
+              ">I'm at the counter</button>";
           }
         }
         checkin.addEventListener("click", async function (e) {
@@ -242,13 +256,15 @@
           sessionBusy = true;
           b.disabled = true;
           try {
-            await YC.api("/api/session", { json: open ? { open: true, minutes: 10 } : { open: false } });
+            await YC.api("/api/session", {
+              json: open ? { open: true, minutes: 10 } : { open: false },
+            });
             toast(open ? "Checked in for 10 minutes." : "Checked out.");
           } catch (err) {
             toast("Check-in failed: " + err.message);
           } finally {
             sessionBusy = false;
-            checkinKey = null; // redraw (state push redraws content)
+            checkinKey = null;
             drawCheckin();
           }
         });
@@ -261,16 +277,21 @@
           var p = s.pending || [];
           if (!p.length) {
             list.innerHTML =
-              '<div class="empty"><b>Nothing waiting</b>You will see requests here when staff ask for more than their rules allow.</div>';
+              '<div class="block empty"><b>Nothing waiting</b>Requests appear here when someone asks for more than their rules allow.</div>';
             return;
           }
           list.innerHTML = p
             .map(function (a) {
               return (
-                '<div class="card">' +
+                '<div class="block">' +
                 (a.claimed_as
-                  ? '<div class="claim">⚠ ' + esc(a.requested_by) + ", speaking as " + esc(a.claimed_as) +
-                    "<small>Someone at the counter, speaking as " + esc(a.claimed_as) + " — was that you?</small></div>"
+                  ? '<div class="claim">' +
+                    esc(a.requested_by) +
+                    ", speaking as " +
+                    esc(a.claimed_as) +
+                    "<span>Someone at the counter, speaking as " +
+                    esc(a.claimed_as) +
+                    ". Was that you?</span></div>"
                   : "") +
                 '<div class="who"><b>' +
                 esc(a.requested_by) +
@@ -278,16 +299,19 @@
                 esc(a.role) +
                 ") · " +
                 esc(ago(a.created_at)) +
-                '</div><div class="what">' +
+                "</div>" +
+                '<div class="what">' +
                 esc(a.summary) +
                 '</div><div class="quote">“' +
                 esc(a.utterance) +
-                '”</div><div class="why">Held because: ' +
+                "”</div>" +
+                '<div class="why">Held because: ' +
                 esc(a.reason) +
                 '</div><div class="btns">' +
-                '<button class="yes" data-id="' +
+                '<button class="btn ink" data-id="' +
                 esc(a.action_id) +
-                '" data-approve="1">Approve</button><button class="no" data-id="' +
+                '" data-approve="1">Approve</button>' +
+                '<button class="btn red" data-id="' +
                 esc(a.action_id) +
                 '" data-approve="0">Reject</button></div></div>'
               );
@@ -297,7 +321,7 @@
         list.addEventListener("click", async function (e) {
           var b = e.target.closest("button[data-id]");
           if (!b) return;
-          var card = b.closest(".card");
+          var card = b.closest(".block");
           card.querySelectorAll("button").forEach(function (x) {
             x.disabled = true;
           });

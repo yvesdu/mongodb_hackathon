@@ -2,9 +2,11 @@
 
 ## Before every run
 
-1. The local server is running: `npm run dev`, then `http://127.0.0.1:8787/api/health` shows `"ok": true`.
-2. Reset the data: `npm run reset`. Run `npm run phone` and note the three links it prints.
-3. Laptop (projected): the Stage link. Click once anywhere on the page so the browser may play sound.
+1. The local server is running: `npm run dev`. Open `http://127.0.0.1:8787/api/health`; it must show `"ok": true`. If it does not, the laptop's public address has changed: in Atlas go to Network Access, Add IP Address, Add Current IP Address, and wait a minute.
+2. Reset the data: `npm run reset`. Run `npm run phone` and note the links it prints.
+3. Two browser windows side by side on the laptop:
+   - left, the product: `http://127.0.0.1:8787/sign`
+   - right, the control: `http://127.0.0.1:8787/counter?key=<COUNTER_KEY>`. Click once on this page so the browser may play sound.
 4. Owner's phone, on the same Wi-Fi: the Owner's approve page link. It shows "You are not checked in".
 5. Headset or close microphone on. Hold the yellow button (or the space bar) while speaking, release when done.
 6. Slow mode is off.

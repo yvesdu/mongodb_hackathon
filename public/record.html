@@ -3,273 +3,49 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Yes Chef · Record</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --bg: #faf8f4;
-        --paper: #fff;
-        --ink: #1d1a16;
-        --dim: #6f675d;
-        --faint: #a59d92;
-        --line: #e7e0d5;
-        --ok: #23784a;
-        --ok-bg: #e3f3e9;
-        --no: #b8352a;
-        --no-bg: #fbe5e2;
-        --held: #a06a00;
-        --held-bg: #fdf1d6;
-        --mark: #ffe7a3;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #12100e;
-          --paper: #1c1916;
-          --ink: #f4efe7;
-          --dim: #a69d91;
-          --faint: #6e665c;
-          --line: #332d27;
-          --ok: #5cc98a;
-          --ok-bg: #173323;
-          --no: #ef6b5e;
-          --no-bg: #3a1714;
-          --held: #f2b544;
-          --held-bg: #3a2c10;
-          --mark: #5a4513;
-        }
-      }
-      * {
-        box-sizing: border-box;
-      }
-      body {
-        margin: 0;
-        background: var(--bg);
-        color: var(--ink);
-        font-family:
-          Inter,
-          system-ui,
-          -apple-system,
-          sans-serif;
-        font-size: 15px;
-        line-height: 1.45;
-      }
-      .layout {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 20px 16px 50px;
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) 300px;
-        gap: 20px;
-        align-items: start;
-      }
-      @media (max-width: 860px) {
-        .layout {
-          grid-template-columns: 1fr;
-        }
-      }
-      h1 {
-        font-size: 22px;
-        margin: 0 0 2px;
-        font-weight: 800;
-      }
-      .sub {
-        color: var(--dim);
-        font-size: 13px;
-        margin-bottom: 16px;
-      }
-      .mono {
-        font-family: "JetBrains Mono", ui-monospace, monospace;
-        font-size: 13px;
-      }
-      .trace {
-        position: relative;
-        padding-left: 26px;
-      }
-      .trace::before {
-        content: "";
-        position: absolute;
-        left: 9px;
-        top: 6px;
-        bottom: 6px;
-        width: 2px;
-        background: var(--line);
-      }
-      .stage {
-        position: relative;
-        background: var(--paper);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 12px 14px;
-        margin-bottom: 12px;
-      }
-      .stage::before {
-        content: "";
-        position: absolute;
-        left: -23px;
-        top: 16px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: var(--paper);
-        border: 2px solid var(--faint);
-      }
-      .stage.ok::before {
-        border-color: var(--ok);
-        background: var(--ok);
-      }
-      .stage.no::before {
-        border-color: var(--no);
-        background: var(--no);
-      }
-      .stage.held::before {
-        border-color: var(--held);
-        background: var(--held);
-      }
-      .stage h2 {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: var(--dim);
-        margin: 0 0 6px;
-        font-weight: 700;
-      }
-      .words {
-        font-size: 20px;
-        font-weight: 500;
-      }
-      mark {
-        background: var(--mark);
-        color: inherit;
-        border-radius: 4px;
-        padding: 0 2px;
-      }
-      mark sub {
-        font:
-          600 10px "JetBrains Mono",
-          monospace;
-        color: var(--dim);
-        margin-left: 2px;
-        vertical-align: baseline;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      td,
-      th {
-        text-align: left;
-        padding: 5px 6px;
-        border-bottom: 1px solid var(--line);
-        vertical-align: top;
-      }
-      th {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        color: var(--faint);
-        font-weight: 600;
-      }
-      .badge {
-        display: inline-block;
-        font-size: 12px;
-        font-weight: 700;
-        padding: 2px 9px;
-        border-radius: 999px;
-      }
-      .b-ok {
-        background: var(--ok-bg);
-        color: var(--ok);
-      }
-      .b-no {
-        background: var(--no-bg);
-        color: var(--no);
-      }
-      .b-held {
-        background: var(--held-bg);
-        color: var(--held);
-      }
-      .b-dim {
-        background: var(--line);
-        color: var(--dim);
-      }
-      .arrow {
-        color: var(--faint);
-        padding: 0 6px;
-      }
-      .gate-line {
-        font-size: 17px;
-        font-weight: 600;
-      }
-      .chain {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 12px 14px;
-        border-radius: 12px;
-        font-weight: 700;
-      }
-      .chain.ok {
-        background: var(--ok-bg);
-        color: var(--ok);
-      }
-      .chain.bad {
-        background: var(--no-bg);
-        color: var(--no);
-      }
-      aside {
-        position: sticky;
-        top: 16px;
-        background: var(--paper);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        padding: 12px;
-      }
-      aside h2 {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.12em;
-        color: var(--dim);
-        margin: 0 0 8px;
-      }
-      aside a {
-        display: block;
-        text-decoration: none;
-        color: inherit;
-        padding: 7px 8px;
-        border-radius: 8px;
-        border: 1px solid transparent;
-      }
-      aside a:hover {
-        background: var(--bg);
-      }
-      aside a.cur {
-        border-color: var(--line);
-        background: var(--bg);
-      }
-      aside .t {
-        font-weight: 600;
-        font-size: 13px;
-      }
-      aside .u {
-        color: var(--dim);
-        font-size: 12px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .err {
-        color: var(--no);
-      }
-      .small {
-        font-size: 12px;
-        color: var(--dim);
-      }
-    </style>
+    <title>Yes Chef · record</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FFFFFF; --ink: #14213D; --muted: #5B6478; --line: #D8DCE6;
+    --accent: #FFC93C; --ok: #1F6F4A; --no: #C0392B; --held: #A9690F;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Atkinson Hyperlegible", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+  .layout { max-width: 1100px; margin: 0 auto; padding: 24px 16px 50px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 40px; align-items: start; }
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } }
+  h1 { font-family: var(--serif); font-weight: 700; font-size: 28px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin-bottom: 12px; }
+  .mono { font-family: var(--sans); }
+  .stage { border-top: 1px solid var(--line); padding: 14px 0; }
+  .stage h2 { font-size: 16px; font-weight: 700; margin: 0 0 6px; }
+  .words { font-family: var(--serif); font-weight: 500; font-size: 22px; line-height: 1.4; }
+  mark { background: var(--accent); color: inherit; padding: 0 2px; }
+  mark sub { font-family: var(--sans); font-size: 12px; color: var(--ink); margin-left: 3px; vertical-align: baseline; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 400; }
+  .badge { font-weight: 700; }
+  .b-ok { color: var(--ok); } .b-no { color: var(--no); } .b-held { color: var(--held); } .b-dim { color: var(--muted); }
+  .arrow { color: var(--muted); padding: 0 6px; }
+  .gate-line { font-size: 17px; }
+  .chain { font-weight: 700; }
+  .chain.ok { color: var(--ok); } .chain.bad { color: var(--no); }
+  .chain .small { color: var(--muted); }
+  aside { position: sticky; top: 16px; }
+  aside h2 { font-size: 16px; font-weight: 700; margin: 0 0 8px; }
+  aside a { display: block; text-decoration: none; color: inherit; padding: 8px 6px; border-top: 1px solid var(--line); border-radius: 6px; }
+  aside a:hover .t { text-decoration: underline; }
+  aside a.cur { border-left: 4px solid var(--accent); padding-left: 10px; }
+  aside .t { font-weight: 700; }
+  aside .u { color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .err { color: var(--no); }
+  .small { font-size: 14px; color: var(--muted); }
+</style>
   </head>
   <body>
     <div class="layout">
@@ -357,11 +133,11 @@
           if (!an) return "";
           if (an.matches) {
             if (!c.ok) return "";
-            return '<div class="chain ok" style="margin-top:8px">✓ Chain intact · ' + esc(c.entries) +
+            return '<div class="chain ok">Chain intact · ' + esc(c.entries) +
               " entries · matches the anchor kept outside Atlas (entry #" + esc(an.seq) + ")" +
               ' <span class="small mono" style="font-weight:500">' + esc(String(an.hash || "").slice(0, 10)) + "…</span></div>";
           }
-          return '<div class="chain bad" style="margin-top:8px">✗ Audit log does not match the anchor kept outside Atlas (entry #' +
+          return '<div class="chain bad">Audit log does not match the anchor kept outside Atlas (entry #' +
             esc(an.seq) + ", anchored " + fmtTime(an.at) + "): history was rewritten or truncated</div>";
         }
         function summarize(name, d) {
@@ -593,19 +369,14 @@
             "</section>";
 
           var c = rv.chain || {};
+          var anchorLine = anchorBadge(c);
           h +=
-            '<section class="stage ' +
-            (c.ok ? "ok" : "no") +
-            '"><h2>7 · Chain check</h2><div class="chain ' +
-            (c.ok ? "ok" : "bad") +
-            '">' +
-            (c.ok
-              ? "✓ Hash chain intact"
-              : "✗ Chain broken at seq " + esc(c.broken_at)) +
-            ' <span class="small" style="font-weight:500">' +
-            esc(c.entries) +
-            " entries checked</span></div>" +
-            anchorBadge(c) +
+            '<section class="stage"><h2>7 · Chain check</h2>' +
+            (anchorLine && c.ok
+              ? anchorLine
+              : '<div class="chain ' + (c.ok ? "ok" : "bad") + '">' +
+                (c.ok ? "Hash chain intact · " + esc(c.entries) + " entries checked" : "Chain broken at entry #" + esc(c.broken_at) + " · " + esc(c.entries) + " entries checked") +
+                "</div>" + (c.ok ? "" : anchorLine)) +
             "</section>";
 
           document.getElementById("trace").innerHTML = h;

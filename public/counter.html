@@ -1,676 +1,183 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Yes Chef · Counter</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
-      rel="stylesheet"
-    />
-    <style>
-      :root {
-        --bg: #12100e;
-        --panel: #1c1916;
-        --panel-2: #24201c;
-        --line: #352f29;
-        --text: #f4efe7;
-        --dim: #a69d91;
-        --faint: #6e665c;
-        --accent: #f2b544;
-        --ok: #5cc98a;
-        --blocked: #ef5b4f;
-        --held: #f2b544;
-        --info: #7fb2e6;
-        --fail: #ef5b4f;
-      }
-      * {
-        box-sizing: border-box;
-      }
-      html,
-      body {
-        margin: 0;
-        min-height: 100%;
-      }
-      body {
-        background: var(--bg);
-        color: var(--text);
-        font-family:
-          Inter,
-          system-ui,
-          -apple-system,
-          sans-serif;
-        font-size: 15px;
-      }
-      .wrap {
-        max-width: 980px;
-        margin: 0 auto;
-        padding: 14px 16px 40px;
-        display: grid;
-        gap: 12px;
-      }
-      .top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-      .logo {
-        font-weight: 800;
-        letter-spacing: -0.01em;
-        font-size: 20px;
-      }
-      .logo span {
-        color: var(--accent);
-      }
-      .conn {
-        font:
-          12px "JetBrains Mono",
-          monospace;
-        color: var(--faint);
-      }
-      .conn.live {
-        color: var(--ok);
-      }
-      .conn.offline {
-        color: var(--blocked);
-      }
-      .conn.mock {
-        color: var(--info);
-      }
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yes Chef · counter (staff)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FFFFFF; --ink: #14213D; --muted: #5B6478; --line: #D8DCE6;
+    --accent: #FFC93C; --ok: #1F6F4A; --no: #C0392B; --held: #A9690F;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Atkinson Hyperlegible", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--ink); font: 16px/1.4 var(--sans); }
+  button, input { font: inherit; color: inherit; }
+  .wrap { height: 100vh; max-width: 900px; margin: 0 auto; padding: 14px 20px; display: flex; flex-direction: column; }
+  .wrap > * { flex: none; }
+  .sec { border-top: 1px solid var(--line); padding: 12px 0; }
 
-      .panel {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 14px;
-        padding: 12px 14px;
-      }
-      .panel h2 {
-        margin: 0 0 8px;
-        font-size: 11px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--dim);
-        font-weight: 700;
-      }
+  .top { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 10px; }
+  .title { font-weight: 700; font-size: 17px; }
+  .conn { font-size: 15px; color: var(--muted); }
+  .conn.offline { color: var(--no); }
+  .halt-banner { display: none; color: var(--no); font-weight: 700; font-size: 16px; padding-bottom: 10px; }
+  body.is-halted .halt-banner { display: block; }
 
-      .who {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        flex-wrap: wrap;
-      }
-      .seg {
-        display: inline-flex;
-        background: var(--panel-2);
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        padding: 3px;
-      }
-      .seg button {
-        appearance: none;
-        border: 0;
-        background: transparent;
-        color: var(--dim);
-        font:
-          600 14px Inter,
-          sans-serif;
-        padding: 8px 16px;
-        border-radius: 999px;
-        cursor: pointer;
-      }
-      .seg button[aria-pressed="true"] {
-        background: var(--text);
-        color: var(--bg);
-      }
-      .seg button small {
-        font-weight: 500;
-        opacity: 0.7;
-        margin-left: 4px;
-      }
-      .seeded {
-        font-size: 12px;
-        color: var(--faint);
-      }
+  .who { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .seg { display: flex; gap: 8px; }
+  .seg button { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 16px; }
+  .seg button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); font-weight: 700; }
+  .caption { font-size: 15px; color: var(--muted); }
+  .osess { font-size: 15px; margin-top: 8px; }
+  .osess.on { color: var(--ok); }
+  .osess.on::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 8px; vertical-align: middle; }
+  .osess.off { color: var(--held); }
 
-      .talk {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 16px;
-        align-items: center;
-      }
-      .mic {
-        width: 150px;
-        height: 150px;
-        border-radius: 50%;
-        border: 0;
-        cursor: pointer;
-        touch-action: none;
-        user-select: none;
-        -webkit-user-select: none;
-        background: radial-gradient(
-          circle at 35% 30%,
-          #ffd27a,
-          var(--accent) 55%,
-          #c98a1c
-        );
-        color: #2a1d06;
-        font:
-          800 17px Inter,
-          sans-serif;
-        line-height: 1.15;
-        box-shadow:
-          0 8px 30px rgba(242, 181, 68, 0.25),
-          inset 0 -6px 0 rgba(0, 0, 0, 0.15);
-        transition: transform 0.1s;
-      }
-      .mic small {
-        display: block;
-        font-weight: 600;
-        font-size: 11px;
-        opacity: 0.7;
-        margin-top: 4px;
-      }
-      .mic.rec {
-        background: radial-gradient(
-          circle at 35% 30%,
-          #ff8a7f,
-          var(--blocked) 60%,
-          #a8302a
-        );
-        color: #fff;
-        transform: scale(1.05);
-        animation: pulse 1s infinite;
-      }
-      .mic.busy {
-        filter: grayscale(0.6) brightness(0.8);
-      }
-      @keyframes pulse {
-        0%,
-        100% {
-          box-shadow: 0 0 0 0 rgba(239, 91, 79, 0.55);
-        }
-        50% {
-          box-shadow: 0 0 0 18px rgba(239, 91, 79, 0);
-        }
-      }
-      .talk-right {
-        display: grid;
-        gap: 8px;
-        min-width: 0;
-      }
-      .label {
-        font-size: 11px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--faint);
-        font-weight: 700;
-      }
-      .heard {
-        font-size: 20px;
-        font-weight: 600;
-        min-height: 1.4em;
-      }
-      .say {
-        font-size: 22px;
-        font-weight: 700;
-        min-height: 1.4em;
-      }
-      .say.ok {
-        color: var(--ok);
-      }
-      .say.blocked {
-        color: var(--blocked);
-      }
-      .say.held {
-        color: var(--held);
-      }
-      .typed {
-        display: flex;
-        gap: 8px;
-      }
-      .typed input {
-        flex: 1;
-        min-width: 0;
-        background: var(--panel-2);
-        border: 1px solid var(--line);
-        color: var(--text);
-        border-radius: 10px;
-        padding: 10px 12px;
-        font:
-          15px Inter,
-          sans-serif;
-      }
-      .typed button,
-      .btn {
-        background: var(--panel-2);
-        border: 1px solid var(--line);
-        color: var(--text);
-        border-radius: 10px;
-        padding: 10px 14px;
-        font:
-          600 14px Inter,
-          sans-serif;
-        cursor: pointer;
-      }
-      .hint {
-        font-size: 12px;
-        color: var(--faint);
-      }
-      .err {
-        color: var(--blocked);
-        font-size: 13px;
-        min-height: 1em;
-      }
+  .talk { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: center; }
+  .mic { width: 112px; height: 112px; border-radius: 50%; border: 0; background: var(--accent); color: var(--ink); font-weight: 700; font-size: 17px; line-height: 1.2;
+         cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .mic small { display: block; font-weight: 400; font-size: 15px; }
+  .mic.rec { background: var(--ink); color: var(--bg); }
+  .mic.busy { opacity: 0.6; }
+  .talk-right { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .heard { font-size: 15px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .say { font-family: var(--serif); font-weight: 500; font-size: 22px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .say.ok { color: var(--ok); } .say.blocked { color: var(--no); } .say.held { color: var(--held); }
+  .typed { display: flex; gap: 8px; }
+  .typed input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 16px; background: var(--bg); }
+  .typed button { border: 1px solid var(--ink); background: var(--bg); border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  .err { color: var(--no); font-size: 15px; }
+  .err:empty { display: none; }
 
-      .trace-head {
-        display: flex;
-        justify-content: space-between;
-        align-items: baseline;
-        gap: 10px;
-      }
-      .trace-head .q { min-width: 0; flex: 1; text-align: right;
-        color: var(--dim);
-        font-size: 13px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .steps {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        align-items: stretch;
-      }
-      .step {
-        position: relative;
-        border: 1px solid var(--line);
-        border-left: 4px solid var(--faint);
-        background: var(--panel-2);
-        border-radius: 8px;
-        padding: 6px 10px;
-        min-width: 120px;
-        max-width: 280px;
-        animation: stepIn 0.35s ease-out;
-      }
-      .step .k {
-        font:
-          600 10px "JetBrains Mono",
-          monospace;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: var(--faint);
-      }
-      .step .l {
-        font-weight: 600;
-        font-size: 14px;
-      }
-      .step .d {
-        font-size: 12px;
-        color: var(--dim);
-        margin-top: 2px;
-      }
-      .step.ok {
-        border-left-color: var(--ok);
-      }
-      .step.ok .k {
-        color: var(--ok);
-      }
-      .step.blocked {
-        border-left-color: var(--blocked);
-        background: rgba(239, 91, 79, 0.1);
-      }
-      .step.blocked .k {
-        color: var(--blocked);
-      }
-      .step.held {
-        border-left-color: var(--held);
-        background: rgba(242, 181, 68, 0.1);
-      }
-      .step.held .k {
-        color: var(--held);
-      }
-      .step.fail {
-        border-left-color: var(--fail);
-        background: rgba(239, 91, 79, 0.1);
-      }
-      .step.fail .k {
-        color: var(--fail);
-      }
-      .step.info {
-        border-left-color: var(--info);
-      }
-      .step.info .k {
-        color: var(--info);
-      }
-      .step.working {
-        border-style: dashed;
-        color: var(--dim);
-      }
-      @keyframes stepIn {
-        from {
-          opacity: 0;
-          transform: translateY(6px);
-        }
-        to {
-          opacity: 1;
-          transform: none;
-        }
-      }
-      .empty {
-        color: var(--faint);
-        font-size: 14px;
-      }
+  .trace { flex: 1 1 auto; min-height: 80px; display: flex; flex-direction: column; }
+  .trace-head { font-size: 15px; color: var(--muted); padding-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .trace-head b { color: var(--ink); }
+  .steps { list-style: none; padding: 0; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .step { display: grid; grid-template-columns: 8px minmax(0, 1fr); column-gap: 10px; padding: 3px 0; font-size: 16px; }
+  .step .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); margin-top: 8px; }
+  .step.ok .dot { background: var(--ok); } .step.blocked .dot, .step.fail .dot { background: var(--no); } .step.held .dot { background: var(--held); }
+  .step.blocked b, .step.fail b { color: var(--no); } .step.held b { color: var(--held); }
+  .step .d { color: var(--muted); font-size: 15px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .step.working { color: var(--muted); }
+  .empty { color: var(--muted); font-size: 15px; }
 
-      .grid2 {
-        display: grid;
-        grid-template-columns: 1.1fr 1fr;
-        gap: 12px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 14px;
-      }
-      td,
-      th {
-        padding: 5px 4px;
-        text-align: left;
-        border-bottom: 1px solid var(--line);
-      }
-      th {
-        font-size: 11px;
-        color: var(--faint);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-      }
-      td.num {
-        font-family: "JetBrains Mono", monospace;
-      }
-      .pill {
-        display: inline-block;
-        font-size: 11px;
-        font-weight: 700;
-        padding: 2px 8px;
-        border-radius: 999px;
-      }
-      .pill.ok {
-        background: rgba(92, 201, 138, 0.15);
-        color: var(--ok);
-      }
-      .pill.no {
-        background: rgba(239, 91, 79, 0.15);
-        color: var(--blocked);
-      }
-      .pill.disc {
-        background: rgba(242, 181, 68, 0.15);
-        color: var(--accent);
-      }
-      tr.flash td {
-        animation: rowflash 1.8s;
-      }
-      @keyframes rowflash {
-        from {
-          background: rgba(242, 181, 68, 0.25);
-        }
-        to {
-          background: transparent;
-        }
-      }
-      .pend {
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 8px 10px;
-        margin-bottom: 6px;
-        background: var(--panel-2);
-      }
-      .pend b {
-        color: var(--held);
-      }
-      .pend .u {
-        color: var(--dim);
-        font-size: 13px;
-        font-style: italic;
-      }
-      .pend .r {
-        font-size: 12px;
-        color: var(--faint);
-      }
+  .footbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 10px; }
+  .kill-btn { background: var(--bg); border: 2px solid var(--no); color: var(--no); font-weight: 700; border-radius: 6px; padding: 7px 18px; cursor: pointer; }
+  .resume-btn { background: var(--ink); border: 2px solid var(--ink); color: var(--bg); font-weight: 700; border-radius: 6px; padding: 7px 18px; cursor: pointer; }
+  .slow { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; cursor: pointer; }
+  .slow input { width: 16px; height: 16px; accent-color: var(--ink); }
+  .drawer-btn { margin-left: auto; background: none; border: 0; padding: 0; color: var(--ink); text-decoration: underline; cursor: pointer; font-size: 15px; }
+  .drawer-btn.has { font-weight: 700; color: var(--held); }
 
-      .kill {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        flex-wrap: wrap;
-      }
-      .kill-btn {
-        background: #3a1512;
-        border: 2px solid var(--blocked);
-        color: #ffd5d0;
-        font-weight: 800;
-        letter-spacing: 0.04em;
-        padding: 12px 18px;
-        border-radius: 12px;
-        cursor: pointer;
-        font-size: 15px;
-      }
-      .resume-btn {
-        background: var(--ok);
-        color: #0d2417;
-        border: 0;
-        font-weight: 800;
-        padding: 12px 18px;
-        border-radius: 12px;
-        cursor: pointer;
-        font-size: 15px;
-      }
-      .halt-banner {
-        display: none;
-        background: var(--blocked);
-        color: #fff;
-        font-weight: 800;
-        text-align: center;
-        padding: 12px;
-        border-radius: 12px;
-        font-size: 18px;
-        letter-spacing: 0.03em;
-      }
-      body.is-halted .halt-banner {
-        display: block;
-      }
-      .links {
-        font-size: 12px;
-        color: var(--faint);
-      }
-      .links a {
-        color: var(--dim);
-      }
+  .drawer { position: fixed; left: 20px; right: 20px; bottom: 64px; max-height: calc(100vh - 130px); overflow-y: auto; z-index: 30;
+            background: var(--bg); border: 1px solid var(--ink); border-radius: 6px; padding: 14px 18px; }
+  .drawer[hidden] { display: none; }
+  .drawer h2 { font-size: 16px; font-weight: 700; margin: 4px 0 6px; }
+  .drawer .part + .part { border-top: 1px solid var(--line); margin-top: 12px; padding-top: 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  td, th { text-align: left; padding: 4px 6px 4px 0; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 400; }
+  td.no { color: var(--no); } td.disc { color: var(--held); } td.muted { color: var(--muted); }
+  tr.flash td { animation: fade 1.8s; }
+  @keyframes fade { from { background: var(--accent); } to { background: transparent; } }
+  .pend { padding: 6px 0; font-size: 15px; }
+  .pend + .pend { border-top: 1px solid var(--line); }
+  .pend .claim { color: var(--held); font-weight: 700; }
+  .pend .u, .pend .r { color: var(--muted); }
+  .hint { font-size: 15px; color: var(--muted); }
+  .owner-qr { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .owner-qr[hidden] { display: none; }
+  .qrbox { width: 120px; height: 120px; }
+  .qrbox svg { width: 100%; height: 100%; display: block; }
+  .links { font-size: 15px; color: var(--muted); }
+  .links a { color: var(--ink); }
 
-      @media (max-width: 720px) {
-        .grid2 {
-          grid-template-columns: 1fr;
-        }
-        .talk {
-          grid-template-columns: 1fr;
-          justify-items: center;
-          text-align: center;
-        }
-        .typed {
-          width: 100%;
-        }
-      }
-      /* trace: readable at projector distance, newest step kept in view */
-      .steps { max-height: 46vh; overflow-y: auto; scroll-behavior: smooth; }
-      .step .k { font-size: 15px; }
-      .step .l { font-size: 18px; }
-      .step .d { font-size: 15px; }
-      .trace-head .q { font-size: 15px; }
-      .slow { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); margin-right: 10px; cursor: pointer; max-width: 300px; }
-      .slow input { width: 18px; height: 18px; accent-color: var(--accent); }
-      .kill > div:last-child { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-      .osess { display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 600; padding: 5px 12px; border-radius: 999px; }
-      .osess::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: currentColor; flex: none; }
-      .osess.on { color: var(--ok); background: rgba(92, 201, 138, 0.12); }
-      .osess.off { color: var(--held); background: rgba(242, 181, 68, 0.12); }
-      .seeded { font-size: 13px; }
-      .claim { color: var(--held); font-weight: 700; margin-bottom: 2px; }
-      /* speaker + owner status stay on screen (also inside /stage) */
-      .sticky-who { position: sticky; top: 0; z-index: 5; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45); }
-      .steps > .step { scroll-margin-top: 90px; }
-      /* ---- fixed-height column: header, talk (always visible), trace (fills, scrolls), footer bar ---- */
-      html, body { height: 100%; overflow: hidden; }
-      .wrap { height: 100vh; display: flex; flex-direction: column; gap: 8px; padding: 8px 12px; }
-      .wrap > * { flex: none; }
-      .top { min-height: 0; }
-      .logo { font-size: 17px; }
-      .sticky-who { position: static; box-shadow: none; padding: 8px 12px; }
-      .who { gap: 6px 10px; }
-      .talk-panel { padding: 10px 12px; }
-      .talk { grid-template-columns: auto minmax(0, 1fr) !important; gap: 14px; text-align: left !important; justify-items: stretch !important; }
-      .mic { width: 120px; height: 120px; font-size: 15px; }
-      .talk-right { gap: 4px; }
-      .heard { font-size: 17px; min-height: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-      .say { font-size: 18px; min-height: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-      .typed input, .typed button { padding: 8px 10px; }
-      .err:empty { display: none; }
-      .trace-panel { flex: 1 1 auto; min-height: 90px; display: flex; flex-direction: column; padding: 10px 12px; }
-      .trace-panel .trace-head { flex: none; }
-      .trace-panel .steps { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; align-content: flex-start; }
-      .footbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; flex-wrap: wrap; }
-      .fb-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
-      .footbar .kill-btn, .footbar .resume-btn { padding: 9px 14px; font-size: 14px; }
-      .footbar .slow { font-size: 12px; max-width: 230px; margin: 0; line-height: 1.2; }
-      .drawer-btn { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 8px 10px; font: 600 13px Inter, sans-serif; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
-      .pcount { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--dim); }
-      .pcount.has { background: var(--held); color: #2a1d06; font-weight: 800; }
-      .drawer { position: fixed; left: 12px; right: 12px; bottom: 70px; max-height: calc(100vh - 140px); overflow-y: auto; z-index: 30; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; padding: 10px; box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6); display: grid; gap: 10px; }
-      .drawer[hidden] { display: none; }
-      .halt-banner { padding: 8px; font-size: 16px; }
-      /* narrow (stage iframe) safety */
-      html, body { overflow-x: clip; }
-      .wrap > * { min-width: 0; }
-      .step { max-width: min(280px, 100%); }
-      .trace-head { min-width: 0; }
-      .owner-qr { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-      .owner-qr[hidden] { display: none; }
-      .qrbox { background: #fff; padding: 6px; border-radius: 8px; width: 120px; height: 120px; }
-      .qrbox svg { width: 100%; height: 100%; display: block; }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="top">
-        <div class="logo">
-          Yes<span>,</span> Chef
-          <span style="color: var(--faint); font-weight: 500; font-size: 14px"
-            >· counter</span
-          >
-        </div>
-        <div class="conn" id="conn">connecting</div>
+  @media (max-width: 520px) {
+    .wrap { padding: 10px 12px; }
+    .mic { width: 96px; height: 96px; font-size: 16px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="title">Yes Chef · counter (staff)</div>
+    <div class="conn" id="conn">connecting</div>
+  </div>
+  <div class="halt-banner" role="alert">Stopped. Nothing will be published until updates resume.</div>
+
+  <section class="sec">
+    <div class="who">
+      <div class="seg" role="group" aria-label="Speaker">
+        <button type="button" data-human="usr_marie" aria-pressed="true">Marie · owner</button>
+        <button type="button" data-human="usr_sam" aria-pressed="false">Sam · employee</button>
       </div>
+      <span class="caption">Who is speaking (a claim, not proof)</span>
+    </div>
+    <div class="osess off" id="osess">Marie is not checked in. Owner requests go to her phone.</div>
+  </section>
 
-      <div class="halt-banner" role="alert">
-        HALTED · the kill switch is on. Nothing will be published.
-      </div>
-
-      <section class="panel sticky-who">
-        <div class="who">
-          <div class="seg" role="group" aria-label="Speaker">
-            <button type="button" data-human="usr_marie" aria-pressed="true">
-              Marie <small>owner</small>
-            </button>
-            <button type="button" data-human="usr_sam" aria-pressed="false">
-              Sam <small>employee</small>
-            </button>
-          </div>
-          <span class="seeded">Who is speaking (a claim, not proof)</span>
-          <span class="osess off" id="osess">Marie not checked in: owner requests go to her phone</span>
-        </div>
-      </section>
-
-      <section class="panel talk-panel">
-        <div class="talk">
-          <button class="mic" id="mic" type="button" aria-label="Hold to talk">
-            HOLD<br />TO TALK<small>or hold space</small>
-          </button>
-          <div class="talk-right">
-            <div>
-              <div class="label">Heard</div>
-              <div class="heard" id="heard">…</div>
-            </div>
-            <div>
-              <div class="label">Reply</div>
-              <div class="say" id="say">…</div>
-            </div>
-            <form class="typed" id="typed">
-              <input
-                id="typedText"
-                type="text"
-                autocomplete="off"
-                placeholder="Or type it: “we’re out of croissants”"
-                aria-label="Type a command"
-              />
-              <button type="submit">Send</button>
-            </form>
-            <div class="err" id="err"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel trace-panel">
-        <div class="trace-head">
-          <h2>Live trace</h2>
-          <div class="q" id="traceq"></div>
-        </div>
-        <div class="steps" id="steps"><div class="empty">No run yet.</div></div>
-      </section>
-
-      <div class="footbar panel">
-        <div class="fb-left">
-          <button class="kill-btn" id="halt" type="button" title="Kill switch: stops publishing immediately; a run in progress is rolled back">HALT</button>
-          <button class="resume-btn" id="resume" type="button" hidden>Clear halt</button>
-          <label class="slow" title="Adds a pause between sign, menu and till so the stop switch can be shown mid-run">
-            <input type="checkbox" id="slow" disabled /> Slow mode: pause between targets (for showing the stop switch)
-          </label>
-        </div>
-        <button class="drawer-btn" id="drawerBtn" type="button" aria-expanded="false" aria-controls="drawer">
-          <span class="pcount" id="pendCount">0 waiting</span> Till &amp; approvals <span class="chev">▴</span>
-        </button>
-      </div>
-
-      <div class="drawer" id="drawer" hidden>
-        <div class="grid2">
-          <section class="panel">
-            <h2>Till</h2>
-            <table>
-              <thead>
-                <tr><th>Item</th><th>Price</th><th>Status</th><th>Discount</th></tr>
-              </thead>
-              <tbody id="till"></tbody>
-            </table>
-          </section>
-          <section class="panel">
-            <h2>Waiting for owner</h2>
-            <div id="pending"><div class="empty">Nothing waiting.</div></div>
-          </section>
-        </div>
-        <div class="hint" id="haltHint">Stops publishing immediately; any run in progress is rolled back.</div>
-        <section class="panel owner-qr" id="ownerQr" hidden>
-          <div><h2>Owner's phone</h2><div class="hint">Scan to open approvals</div><a id="ownerLink" target="_blank" class="hint">open link</a></div>
-          <div class="qrbox" id="ownerQrCode"></div>
-        </section>
-        <div class="links" id="links"></div>
+  <section class="sec">
+    <div class="talk">
+      <button class="mic" id="mic" type="button" aria-label="Hold to talk">Hold to talk<small>or hold space</small></button>
+      <div class="talk-right">
+        <div class="heard" id="heard">Nothing heard yet.</div>
+        <div class="say" id="say"></div>
+        <form class="typed" id="typed">
+          <input id="typedText" type="text" autocomplete="off" placeholder="Or type it: we're out of croissants" aria-label="Type a command">
+          <button type="submit">Send</button>
+        </form>
+        <div class="err" id="err"></div>
       </div>
     </div>
+  </section>
 
-    <audio id="earcon" preload="auto"></audio>
-    <audio id="voice"></audio>
-    <script src="/vendor/qrcode.js"></script>
+  <section class="sec trace">
+    <div class="trace-head" id="traceq">Live trace</div>
+    <ol class="steps" id="steps"><li class="empty">No run yet.</li></ol>
+  </section>
+
+  <div class="footbar">
+    <button class="kill-btn" id="halt" type="button" title="Stops publishing immediately; a run in progress is rolled back">Stop</button>
+    <button class="resume-btn" id="resume" type="button" hidden>Resume updates</button>
+    <label class="slow" title="Adds a pause between sign, menu and till so the stop switch can be shown mid-run">
+      <input type="checkbox" id="slow" disabled> Slow mode (pause between targets)
+    </label>
+    <button class="drawer-btn" id="drawerBtn" type="button" aria-expanded="false" aria-controls="drawer">Till and approvals (<span id="pendCount">0</span>)</button>
+  </div>
+</div>
+
+<div class="drawer" id="drawer" hidden>
+  <div class="part">
+    <h2>Waiting for the owner</h2>
+    <div id="pending"><div class="empty">Nothing waiting.</div></div>
+  </div>
+  <div class="part">
+    <h2>Till</h2>
+    <table>
+      <thead><tr><th>Item</th><th>Price</th><th>Status</th><th>Discount</th></tr></thead>
+      <tbody id="till"></tbody>
+    </table>
+  </div>
+  <div class="part">
+    <div class="hint" id="haltHint">Stop halts publishing immediately; any run in progress is rolled back.</div>
+  </div>
+  <div class="part owner-qr" id="ownerQr" hidden>
+    <div><h2>Owner's phone</h2><div class="hint">Scan to open approvals</div><a id="ownerLink" target="_blank" class="hint">Open link</a></div>
+    <div class="qrbox" id="ownerQrCode"></div>
+  </div>
+  <div class="part links" id="links"></div>
+</div>
+
+<audio id="earcon" preload="auto"></audio>
+<audio id="voice"></audio>
+<script src="/vendor/qrcode.js"></script>
     <script src="/app.js"></script>
     <script>
       (function () {
@@ -1037,10 +544,10 @@
           var left = YC.ownerLeftMs(state), el = $("osess");
           if (left > 0) {
             el.className = "osess on";
-            el.textContent = "Marie checked in from her device · " + YC.mmss(left) + " left";
+            el.textContent = "Marie is checked in from her device · " + YC.mmss(left) + " left";
           } else {
             el.className = "osess off";
-            el.textContent = "Marie not checked in: owner requests go to her phone";
+            el.textContent = "Marie is not checked in. Owner requests go to her phone.";
           }
         }
         setInterval(drawOwnerSession, 1000);
@@ -1052,35 +559,25 @@
           $("halt").hidden = !!s.halted;
           $("resume").hidden = !s.halted;
           $("haltHint").textContent = s.halted
-            ? "Halted. Clear it to let changes through again."
-            : "Stops publishing immediately; any run in progress is rolled back.";
+            ? "Stopped. Resume updates to let changes through again."
+            : "Stop halts publishing immediately; any run in progress is rolled back.";
 
           var t = s.trace;
           if (t && t.steps) {
-            $("traceq").textContent =
-              t.speaker + " (" + t.role + "): “" + t.text + "”";
+            $("traceq").innerHTML =
+              "<b>" + esc(t.speaker) + "</b> (" + esc(t.role) + "): " + esc(t.text);
             var html = t.steps
               .map(function (st) {
                 return (
-                  '<div class="step ' +
-                  esc(st.status) +
-                  '"><div class="k">' +
-                  esc(KEYNAME[st.key] || st.key) +
-                  " · " +
-                  esc(st.status) +
-                  '</div><div class="l">' +
-                  esc(st.label) +
-                  "</div>" +
-                  (st.detail
-                    ? '<div class="d">' + esc(st.detail) + "</div>"
-                    : "") +
-                  "</div>"
+                  '<li class="step ' + esc(st.status) + '"><span class="dot"></span><div><b>' + esc(st.label) + "</b>" +
+                  (st.detail ? '<div class="d">' + esc(st.detail) + "</div>" : "") +
+                  "</div></li>"
                 );
               })
               .join("");
             if (!t.done)
               html +=
-                '<div class="step working"><div class="k">working</div><div class="l">…</div></div>';
+                '<li class="step working"><span class="dot"></span><div>Working…</div></li>';
             var stepsEl = $("steps");
             if (
               stepsEl.getAttribute("data-run") !== t.run_id ||
@@ -1109,16 +606,8 @@
                 esc(YC.itemName(s, r.item_id)) +
                 '</td><td class="num">' +
                 esc(money(r.price)) +
-                "</td><td>" +
-                (r.available
-                  ? '<span class="pill ok">available</span>'
-                  : '<span class="pill no">sold out</span>') +
-                "</td><td>" +
-                (r.discount_pct
-                  ? '<span class="pill disc">' +
-                    esc(r.discount_pct) +
-                    "% off</span>"
-                  : '<span style="color:var(--faint)">none</span>') +
+                (r.available ? "</td><td>available" : '</td><td class="no">sold out') +
+                (r.discount_pct ? '</td><td class="disc">' + esc(r.discount_pct) + "% off" : '</td><td class="muted">none') +
                 "</td></tr>"
               );
             })
@@ -1126,15 +615,15 @@
 
           var p = s.pending || [];
           var pc = $("pendCount");
-          pc.textContent = p.length + " waiting";
-          pc.className = "pcount" + (p.length ? " has" : "");
+          pc.textContent = String(p.length);
+          $("drawerBtn").classList.toggle("has", p.length > 0);
           $("pending").innerHTML = p.length
             ? p
                 .map(function (a) {
                   return (
                     '<div class="pend">' +
                     (a.claimed_as
-                      ? '<div class="claim">⚠ ' + esc(a.requested_by) + ", speaking as " + esc(a.claimed_as) + " (unproven, sent to her phone)</div>"
+                      ? '<div class="claim">' + esc(a.requested_by) + ", speaking as " + esc(a.claimed_as) + " (not proven; sent to her phone)</div>"
                       : "") +
                     "<b>" +
                     esc(a.requested_by) +
@@ -1157,9 +646,8 @@
         $("drawerBtn").addEventListener("click", function () {
           var d = $("drawer"), open = d.hidden;
           d.hidden = !open;
-          d.style.bottom = document.querySelector(".footbar").offsetHeight + 16 + "px";
+          d.style.bottom = window.innerHeight - document.querySelector(".footbar").getBoundingClientRect().top + 8 + "px";
           this.setAttribute("aria-expanded", String(open));
-          this.querySelector(".chev").textContent = open ? "▾" : "▴";
         });
 
         // ---------- slow mode (GET/POST /api/config)
