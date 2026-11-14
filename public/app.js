@@ -119,7 +119,18 @@
         },
       ],
       halted: qs.get("halted") === "1",
+      owner_session: null,
       pending: [
+        {
+          action_id: "act_mock_claim",
+          requested_by: "Counter terminal",
+          role: "employee",
+          claimed_as: "Marie",
+          summary: "Coffee now $4.25",
+          utterance: "Coffee is four twenty-five from now on.",
+          reason: "Only the owner may set prices, and Marie is not checked in from her device.",
+          created_at: now,
+        },
         {
           action_id: "act_mock_held",
           requested_by: "Sam",
@@ -282,7 +293,17 @@
     })[0];
     return s ? s.text_en : id;
   }
-  function mockGate(call, role) {
+  function mockGate(call, role, claimOwner) {
+    if (claimOwner) {
+      var asEmp = mockGate(call, "employee");
+      if (asEmp.decision === "allow") return asEmp;
+      if (call.tool === "set_price" && (call.price < 0.5)) return asEmp;
+      return {
+        decision: "needs_approval",
+        rule: "owner_device_required v1",
+        reason: "Only the owner may do this, and Marie is not checked in from her device.",
+      };
+    }
     if (role === "owner")
       return {
         decision: "allow",
@@ -430,11 +451,12 @@
       status: "ok",
     });
     await wait(400);
+    var claimUnproven = body.human_id === "usr_marie" && ownerLeftMs(mockState) <= 0;
     var results = [],
       says = [];
     for (var i = 0; i < calls.length; i++) {
       var c = calls[i],
-        g = mockGate(c, who.role),
+        g = mockGate(c, who.role, claimUnproven),
         aid = "act_" + Date.now().toString(36) + i;
       if (mockState.halted) {
         step({
@@ -478,8 +500,9 @@
         s = clone(mockState);
         s.pending.push({
           action_id: aid,
-          requested_by: who.name,
-          role: who.role,
+          requested_by: claimUnproven ? "Counter terminal" : who.name,
+          role: claimUnproven ? "employee" : who.role,
+          claimed_as: claimUnproven ? "Marie" : null,
           summary: describe(c),
           utterance: body.text,
           reason: g.reason,
@@ -740,6 +763,15 @@
       return { text: MOCK_PHRASES[mockPhraseIdx++ % MOCK_PHRASES.length] };
     }
     if (p === "/api/utterance") return mockUtterance(body);
+    if (p === "/api/session") {
+      var ss = clone(mockState);
+      var now = Date.now();
+      ss.owner_session = body.open
+        ? { human_id: "usr_marie", name: "Marie", opened_at: new Date(now).toISOString(), expires_at: new Date(now + (body.minutes || 10) * 60000).toISOString() }
+        : null;
+      pushMock(ss);
+      return { owner_session: ss.owner_session };
+    }
     if (p === "/api/halt") {
       var s = clone(mockState);
       s.halted = !!body.halt;
@@ -876,6 +908,19 @@
     return s ? s.text_en : String(id || "").replace(/^item_/, "");
   }
 
+  /** ms left on the owner's device session; 0 when missing, null or expired locally. */
+  function ownerLeftMs(state) {
+    var os = state && state.owner_session;
+    if (!os || !os.expires_at) return 0;
+    var left = new Date(os.expires_at).getTime() - Date.now();
+    return isFinite(left) && left > 0 ? left : 0;
+  }
+  function mmss(ms) {
+    var t = Math.max(0, Math.ceil(ms / 1000));
+    var m = Math.floor(t / 60), sec = t % 60;
+    return m + ":" + (sec < 10 ? "0" : "") + sec;
+  }
+
   var configP = null;
   /** GET /api/config once: { public_url: string | null }. Never rejects. */
   function config() {
@@ -894,6 +939,8 @@
 
   window.YC = {
     config: config,
+    ownerLeftMs: ownerLeftMs,
+    mmss: mmss,
     MOCK: MOCK,
     KEY: KEY,
     qs: qs,

@@ -59,6 +59,10 @@ export default {
         }
 
         // Approving a held request needs the owner's key (stands in for the owner's device login).
+        if (path === "/api/session" && post) {
+          if (!isOwner) return json({ error: "owner key required" }, 401);
+          return json(await (await shop()).session((await request.json()) as { open: boolean; minutes?: number }));
+        }
         if (path === "/api/approve" && post) {
           if (!isOwner) return json({ error: "owner key required" }, 401);
           const body = (await request.json()) as { action_id: string; approve: boolean };

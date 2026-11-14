@@ -179,6 +179,16 @@ const actionsValidator = {
             },
           },
           targets: { bsonType: "array", description: "Per-target progress" },
+          authority: {
+            bsonType: "object",
+            required: ["claimed", "verified", "method"],
+            description: "Whose authority the action ran under, and how it was established",
+            properties: {
+              claimed: { bsonType: "string", minLength: 1 },
+              verified: { bsonType: "bool" },
+              method: { enum: ["owner_device_session", "counter_terminal"] },
+            },
+          },
           created_at: { bsonType: "date" },
         },
       },
@@ -327,7 +337,23 @@ const menuSchema = {
   },
 };
 
+const sessionsSchema = {
+  $jsonSchema: {
+    bsonType: "object",
+    required: ["shop_id", "human_id", "role", "opened_via", "opened_at", "expires_at"],
+    properties: {
+      shop_id: { bsonType: "string" },
+      human_id: { bsonType: "string", minLength: 1, description: "A session belongs to one person" },
+      role: { enum: ["owner"], description: "Only the owner opens a session" },
+      opened_via: { enum: ["owner_device"], description: "Sessions open only from the owner's own device" },
+      opened_at: { bsonType: "date" },
+      expires_at: { bsonType: "date", description: "Every session expires (TTL index)" },
+    },
+  },
+};
+
 export const VALIDATORS: Record<string, Record<string, unknown> | null> = {
+  sessions: sessionsSchema,
   identities: identitiesSchema,
   policies: policiesSchema,
   menu_items: menuSchema,
@@ -380,6 +406,7 @@ export async function applyValidators(
     .collection("audit")
     .createIndex({ shop_id: 1, seq: 1 }, { unique: true });
   await db.collection("audit").createIndex({ action_id: 1, seq: 1 });
+  await db.collection("sessions").createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 });
   log(`validators, indexes and pre/post images applied on ${db.databaseName}`);
 }
 

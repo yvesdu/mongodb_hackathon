@@ -263,3 +263,97 @@ test("retired rules are ignored", () => {
   assert.equal(d.rule_id, "default_deny");
   assert.equal(d.reason, "No rule lets an employee mark an item sold out.");
 });
+
+// ---------- unverified owner claim from the shared counter ----------
+const MARKER = rule({
+  rule_id: "owner_device_required",
+  effect: "deny",
+  actions: ["*"],
+  roles: ["*"],
+  conditions: { requires_owner_device: true },
+  reason_en: "Owner commands need the owner's own device. Nobody is checked in as the owner, so this was sent to her phone.",
+});
+const RULES_M = [...RULES, MARKER];
+const claimed = (type: ActionType, params: ActionParams, extra: Record<string, unknown> = {}) =>
+  evaluate({ type, params, actor: actor("employee"), item: muffin, rules: RULES_M, claim: { role: "owner" }, ...extra });
+
+test("claim: 50% promo is held for the owner's device", () => {
+  const d = claimed("start_promo", promo(50));
+  assert.equal(d.decision, "needs_approval");
+  assert.equal(d.rule_id, "owner_device_required");
+  assert.equal(d.version, 1);
+  assert.match(d.reason!, /owner's own device/);
+});
+
+test("claim: set_price within limits is held", () => {
+  const d = claimed("set_price", { item_id: "item_muffin", price: 3.5 });
+  assert.equal(d.decision, "needs_approval");
+  assert.equal(d.rule_id, "owner_device_required");
+});
+
+test("claim: mark_sold_out is allowed at employee level", () => {
+  const d = claimed("mark_sold_out", { item_id: "item_muffin" });
+  assert.equal(d.decision, "allow");
+  assert.equal(d.rule_id, "staff_stock");
+});
+
+test("claim: 10% promo is allowed via staff_promos", () => {
+  const d = claimed("start_promo", promo(10));
+  assert.equal(d.decision, "allow");
+  assert.equal(d.rule_id, "staff_promos");
+});
+
+test("claim: 90% promo is denied with the owner's 50% limit", () => {
+  const d = claimed("start_promo", promo(90));
+  assert.equal(d.decision, "deny");
+  assert.equal(d.rule_id, "owner_promos");
+  assert.match(d.reason!, /50%/);
+});
+
+test("claim: set_price to 0 is denied citing the min price", () => {
+  const d = claimed("set_price", { item_id: "item_muffin", price: 0 });
+  assert.equal(d.decision, "deny");
+  assert.equal(d.rule_id, "owner_prices");
+  assert.match(d.reason!, /below \$0\.50/);
+});
+
+test("claim: version and reason come from the marker policy when present", () => {
+  const rules = [...RULES, { ...MARKER, version: 3, reason_en: "Custom marker reason." }];
+  const d = evaluate({ type: "start_promo", params: promo(50), actor: actor("employee"), item: muffin, rules, claim: { role: "owner" } });
+  assert.equal(d.version, 3);
+  assert.equal(d.reason, "Custom marker reason.");
+});
+
+test("claim: default reason and version 1 when no marker policy exists", () => {
+  const d = evaluate({ type: "start_promo", params: promo(50), actor: actor("employee"), item: muffin, rules: RULES, claim: { role: "owner" } });
+  assert.deepEqual(d, {
+    decision: "needs_approval",
+    rule_id: "owner_device_required",
+    version: 1,
+    reason: "Owner commands need the owner's own device. Nobody is checked in as the owner, so this was sent to her phone.",
+  });
+});
+
+test("marker rule does not block a verified owner", () => {
+  const d = evaluate({ type: "start_promo", params: promo(50), actor: actor("owner"), item: muffin, rules: RULES_M });
+  assert.equal(d.decision, "allow");
+  assert.equal(d.rule_id, "owner_promos");
+  const p = evaluate({ type: "set_price", params: { item_id: "item_muffin", price: 3.5 }, actor: actor("owner"), item: muffin, rules: RULES_M });
+  assert.equal(p.decision, "allow");
+});
+
+test("marker rule does not change employee decisions without a claim", () => {
+  const d = evaluate({ type: "set_price", params: { item_id: "item_muffin", price: 2.5 }, actor: actor("employee"), item: muffin, rules: RULES_M });
+  assert.equal(d.rule_id, "default_deny");
+});
+
+test("claim: undo of an owner price change is held", () => {
+  const d = claimed("undo", {}, { original: orig("set_price", { item_id: "item_muffin", price: 3.5 }, "owner") });
+  assert.equal(d.decision, "needs_approval");
+  assert.equal(d.rule_id, "owner_device_required");
+});
+
+test("claim: undo of a sold-out is allowed", () => {
+  const d = claimed("undo", {}, { original: orig("mark_sold_out", { item_id: "item_muffin" }, "employee") });
+  assert.equal(d.decision, "allow");
+});

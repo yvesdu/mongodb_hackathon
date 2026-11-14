@@ -4,7 +4,7 @@ import * as ledger from "./ledger";
 import { handleApproval, handleUtterance } from "./orchestrator";
 import { AGENT_ID, SHOP_ID, type Env, type RunTrace, type ShopState } from "./types";
 
-const WATCHED = ["target_sign", "target_menu", "target_till", "policies", "control", "actions"];
+const WATCHED = ["target_sign", "target_menu", "target_till", "policies", "control", "actions", "sessions"];
 
 const EMPTY: ShopState = { sign: [], menu: [], till: [], halted: false, pending: [], trace: null, updatedAt: 0 };
 
@@ -192,6 +192,24 @@ export class YesChefAgent extends Agent<Env, ShopState> {
     this.ctx.waitUntil(this.anchorHead());
     await this.refresh();
     return out;
+  }
+
+  /**
+   * Owner check-in, called only from the owner's own device (owner key).
+   * It opens or closes a time-limited owner session stored in Atlas; a TTL index removes it when it expires.
+   */
+  async session(input: { open: boolean; minutes?: number }) {
+    const db = this.db();
+    if (input.open) {
+      const minutes = Math.min(Math.max(Number(input.minutes ?? 10), 0.25), 60);
+      const s = await ledger.openOwnerSession(db, { human_id: "usr_marie", minutes });
+      await this.schedule(new Date(new Date(s.expires_at).getTime() + 500), "refresh"); // redraw when it lapses
+    } else {
+      await ledger.closeOwnerSession(db, "usr_marie");
+    }
+    this.ctx.waitUntil(this.anchorHead());
+    const state = await this.refresh();
+    return { owner_session: state.owner_session ?? null };
   }
 
   /** Kill switch. Stored in Atlas, read before every target write. */

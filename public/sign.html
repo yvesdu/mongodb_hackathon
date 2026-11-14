@@ -412,7 +412,28 @@
       .status.offline {
         color: var(--red);
       }
-    </style>
+        /* ---- fit-to-viewport layout: header band (with QR), 4 rows that always fit, thin footer ---- */
+      .board { grid-template-rows: auto minmax(0, 1fr) auto; padding: min(2.4vmin, 2.4vh) clamp(14px, 3.4vmin, 56px); }
+      header { align-items: center; padding-bottom: 0.8vh; }
+      .brand h1 { font-size: min(7.4vmin, 7vh); }
+      .brand .tag { font-size: min(2.2vmin, 2.2vh); }
+      .head-right { display: flex; align-items: center; gap: min(2.4vmin, 2.4vh); }
+      .clock { font-size: min(3.4vmin, 3.4vh); }
+      .qr .code { width: min(12vmin, 12vh); height: min(12vmin, 12vh); padding: 0.6vh; }
+      .qr .cap { font-size: min(2.8vmin, 2.8vh); text-align: right; }
+      main { display: flex; flex-direction: column; justify-content: space-evenly; min-height: 0; overflow: hidden; padding: 0.4vh 0; }
+      .item { flex: none; padding: 0.5vh 1.2vmin; }
+      .item .en { font-size: min(6.4vmin, 5.2vh); line-height: 1.05; }
+      .item .en .leader { transform: translateY(-1vh); }
+      .item .fr { font-size: min(3vmin, 2.5vh); line-height: 1.2; margin-top: 0.1vh; padding-bottom: 0.1em; }
+      .item .price { font-size: min(6.8vmin, 5.4vh); }
+      .promo { margin-top: 0.5vh; padding: 0.3vh 1.6vmin 0.4vh; border-width: 2px; }
+      .promo .p-en { font-size: min(3.4vmin, 2.7vh); }
+      .promo .p-fr { font-size: min(2.3vmin, 1.9vh); }
+      .stamp { font-size: min(4.6vmin, 4.4vh); left: 60%; }
+      footer { padding-top: 0.6vh; }
+      .foot-note { font-size: min(1.9vmin, 1.8vh); max-width: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  </style>
   </head>
   <body>
     <div class="frame">
@@ -426,21 +447,18 @@
               <span>· today's board / l'ardoise du jour</span>
             </div>
           </div>
-          <div class="clock chalk" id="clock"></div>
+          <div class="head-right">
+            <div class="clock chalk" id="clock"></div>
+            <div class="qr">
+              <div class="cap chalk">Live menu<small>Menu en direct</small></div>
+              <div class="code" id="qr" aria-label="QR code to the live menu"></div>
+            </div>
+          </div>
         </header>
         <main id="items" aria-live="polite"></main>
         <footer>
           <div class="foot-note chalk">
-            Prices in CAD. <b>Updated by voice</b>, checked against the shop's
-            rules. <br />Prix en dollars canadiens.
-          </div>
-          <div class="qr">
-            <div class="cap chalk">Live menu<small>Menu en direct</small></div>
-            <div
-              class="code"
-              id="qr"
-              aria-label="QR code to the live menu"
-            ></div>
+            Prices in CAD · Prix en dollars canadiens · <b>Updated by voice</b>, checked against the shop's rules.
           </div>
         </footer>
         <div class="halted" role="alert">

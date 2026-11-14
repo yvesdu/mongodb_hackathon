@@ -6,6 +6,8 @@ import { evaluate } from "./gate";
 import * as ledger from "./ledger";
 import {
   AGENT_ID,
+  COUNTER_ID,
+  type Authority,
   type ActionDoc,
   type ActionParams,
   type ActionType,
@@ -111,11 +113,12 @@ export async function handleUtterance(
   const lap = (label: string) => console.log(`[timing] ${label} +${Date.now() - t0}ms`);
   const text = (input.text ?? "").trim();
   // One parallel read: who is speaking, the kill switch, the menu and the active rules.
-  const [identity, haltedNow, menu, rules] = await Promise.all([
+  const [identity, haltedNow, menu, rules, session] = await Promise.all([
     ledger.getIdentity(db, input.human_id),
     ledger.isHalted(db),
     ledger.loadMenu(db),
     ledger.loadRules(db),
+    ledger.getOwnerSession(db, input.human_id),
   ]);
   if (
     !identity ||
@@ -129,12 +132,34 @@ export async function handleUtterance(
       say: "I don't know who is speaking, so nothing was changed.",
     };
   }
-  const role = identity.role as Role;
-  const actor: Actor = { human_id: identity._id, role, agent_id: AGENT_ID };
+  // The counter is a shared terminal trusted at employee level. Choosing a name there is a claim.
+  // Owner authority exists only while the owner has a live session opened from her own device.
+  let role = identity.role as Role;
+  let actorId = identity._id;
+  let claim: { role: Role } | null = null;
+  let authority: Authority = { claimed: identity._id, verified: false, method: "counter_terminal" };
+  let who = `${identity.name} (${role}, at the counter)`;
+  if (identity.role === "owner") {
+    if (session) {
+      authority = {
+        claimed: identity._id,
+        verified: true,
+        method: "owner_device_session",
+        session_expires_at: session.expires_at,
+      };
+      who = `${identity.name} (owner, checked in from her own device)`;
+    } else {
+      role = "employee";
+      actorId = COUNTER_ID;
+      claim = { role: "owner" };
+      who = `someone at the counter, speaking as ${identity.name} (not verified)`;
+    }
+  }
+  const actor: Actor = { human_id: actorId, role, agent_id: AGENT_ID };
 
   const trace: RunTrace = {
     run_id,
-    speaker: identity.name,
+    speaker: claim ? `Someone at the counter, as ${identity.name}` : identity.name,
     role,
     text,
     steps: [],
@@ -154,7 +179,7 @@ export async function handleUtterance(
 
   step({
     key: "heard",
-    label: `Heard ${identity.name} (${role})`,
+    label: `Heard ${who}`,
     status: "info",
     detail: text,
   });
@@ -289,7 +314,7 @@ export async function handleUtterance(
 
     // The gate is pure code: it sees the request, the speaker's role and the rules from Atlas.
     // The request and the verdict are then written together, before anything touches a target.
-    const decision = evaluate({ type, params, actor, item, rules, original });
+    const decision = evaluate({ type, params, actor, item, rules, original, claim });
     const judged = await ledger.proposeDecided(db, {
       run_id,
       type,
@@ -299,6 +324,7 @@ export async function handleUtterance(
       params,
       undo_of: original?._id ?? null,
       decision,
+      authority,
       begin: true, // an allowed action starts publishing in the same transaction that records the verdict
     });
     lap(`proposeDecided ${type}`);
@@ -395,7 +421,9 @@ export async function handleUtterance(
       `${done.length ? "But one thing is" : "That's"} not a yes, chef. ${refused.join(" ")}${done.length ? "" : " Nothing was published."}`,
     );
   if (held.length)
-    parts.push(`I've held that for the owner, chef. ${held.join(" ")}`);
+    parts.push(
+      `${claim ? `I can't confirm that's ${identity.name}, chef.` : "I've held that for the owner, chef."} ${held.join(" ")}`,
+    );
   parts.push(...asides.filter((a, i) => asides.indexOf(a) === i));
   if (!parts.length) parts.push("I didn't catch a change to the menu, chef.");
 

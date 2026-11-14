@@ -70,7 +70,7 @@ async function main() {
     check(
       "reset and seed",
       (await L.loadMenu(db)).length === 4 &&
-        (await L.loadRules(db)).length === 6,
+        (await L.loadRules(db)).length === 7,
     );
 
     // 1. owner promo: propose, allow, publish
@@ -274,6 +274,51 @@ async function main() {
     sd = await L.resolveApproval(db, sd._id, { approve: true, approver: { human_id: "usr_marie", role: "owner" } });
     check("approval by a different person still works", sd.status === "allowed" && sd.policy.approved_by === "usr_marie");
 
+    // owner sessions and authority
+    const counter: Actor = { human_id: "usr_counter", role: "employee", agent_id: AGENT_ID };
+    const sess = await L.openOwnerSession(db, { human_id: "usr_marie", minutes: 30 });
+    const got = await L.getOwnerSession(db, "usr_marie");
+    check("session open -> getOwnerSession returns it", !!got && got.name === "Marie" && got.expires_at === sess.expires_at, got?.expires_at ?? "null");
+    check("snapshot shows owner_session", (await L.snapshot(db)).owner_session?.human_id === "usr_marie");
+    let notOwner = "";
+    try { await L.openOwnerSession(db, { human_id: "usr_sam", minutes: 5 }); } catch (e: any) { notOwner = e.message; }
+    check("openOwnerSession refuses a non-owner", /not an active owner/.test(notOwner));
+    const verifiedAct = await L.proposeDecided(db, {
+      run_id: `run_check_${Date.now()}`, type: "set_price", actor: marie,
+      utterance: { text: "Lattes are 5 dollars", lang: "en", stt: "typed" }, evidence: [],
+      params: { item_id: "item_latte", price: 5 },
+      decision: { decision: "allow", rule_id: "owner_prices", version: 1, reason: null },
+      authority: { claimed: "usr_marie", verified: true, method: "owner_device_session", session_expires_at: sess.expires_at },
+    });
+    const vrec = await L.getRecord(db, verifiedAct._id);
+    const va: any = vrec?.action.authority;
+    check("action stored with authority round-trips", va?.verified === true && va?.method === "owner_device_session" && va?.claimed === "usr_marie" &&
+      vrec!.audit[0].event === "action.proposed" && (vrec!.audit[0].detail as any).authority?.verified === true, JSON.stringify(va));
+    await L.closeOwnerSession(db, "usr_marie");
+    check("close removes the session", (await L.getOwnerSession(db, "usr_marie")) === null &&
+      (await db.collection("sessions").countDocuments({ _id: "sess_usr_marie" as any })) === 0 && (await L.snapshot(db)).owner_session === null);
+    await db.collection<any>("sessions").insertOne({ _id: "sess_usr_marie", shop_id: "shop_demo", human_id: "usr_marie", role: "owner",
+      opened_via: "owner_device", opened_at: new Date(Date.now() - 3_600_000), expires_at: new Date(Date.now() - 60_000) });
+    check("expired session -> getOwnerSession null", (await L.getOwnerSession(db, "usr_marie")) === null && (await L.snapshot(db)).owner_session === null);
+    await db.collection("sessions").deleteMany({});
+    const ttl = (await db.collection("sessions").indexes()).find((i) => i.key?.expires_at === 1);
+    check("TTL index exists on sessions.expires_at", ttl?.expireAfterSeconds === 0, JSON.stringify(ttl));
+    let claim = await L.proposeDecided(db, {
+      run_id: `run_check_${Date.now()}`, type: "start_promo", actor: counter,
+      utterance: { text: "Fifty percent off croissants", lang: "en", stt: "typed" }, evidence: [],
+      params: { item_id: "item_croissant", discount_pct: 50, text_en: "50% off", text_fr: "50 % de rabais", ends_at: null },
+      decision: { decision: "needs_approval", rule_id: "owner_device_required", version: 1,
+        reason: "Owner commands need the owner's own device. Nobody is checked in as the owner, so this was sent to her phone." },
+      authority: { claimed: "usr_marie", verified: false, method: "counter_terminal" },
+    });
+    const ps = (await L.snapshot(db)).pending.find((p) => p.action_id === claim._id);
+    check("snapshot pending shows claimed_as", ps?.claimed_as === "Marie" && ps?.requested_by === "Someone at the counter", JSON.stringify(ps));
+    claim = await L.resolveApproval(db, claim._id, { approve: true, approver: { human_id: "usr_marie", role: "owner" } });
+    claim = await L.publish(db, claim._id);
+    const exClaim = await L.explain(db, "item_croissant");
+    check("explain mentions the unverified claim", claim.status === "verified" && /someone at the counter asked for it as Marie/.test(exClaim.text) &&
+      /Nobody was checked in as the owner/.test(exClaim.text), exClaim.text);
+
     // 4. blocked action leaves targets unchanged
     const latBefore = await targets(db, "item_latte");
     let b = await propose(
@@ -341,7 +386,7 @@ async function main() {
       strip(crAfter.sign) === strip(crBefore.sign) &&
         strip(crAfter.menu) === strip(crBefore.menu) &&
         strip(crAfter.till) === strip(crBefore.till) &&
-        crAfter.sign.action_id === "seed",
+        crAfter.sign.action_id === crBefore.sign.action_id,
       `sign.price=${crAfter.sign.price} till.price=${crAfter.till.price}`,
     );
     check("isHalted reads true", await L.isHalted(db));

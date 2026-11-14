@@ -83,3 +83,15 @@ Base is the deployed Worker. Routes marked "counter key" need header `x-key: <CO
 Seeded identities: `usr_marie` (Marie, owner), `usr_sam` (Sam, employee), `agent_yeschef_v1`.
 
 Menu: coffee 3.50, latte 4.75, croissant 3.25, muffin 3.00 (ids `item_coffee`, `item_latte`, `item_croissant`, `item_muffin`).
+
+## Identity: owner authority comes only from the owner's device
+
+The counter is a shared terminal trusted at employee level. The switch on the counter is a claim, not proof.
+
+- Marie checks in from her own device (`/approve?key=<OWNER_KEY>`), which opens a time-limited owner session stored in Atlas (`sessions` collection, TTL index on `expires_at`).
+- With a live session, a request spoken as Marie runs as `usr_marie` (owner), `authority: { claimed: "usr_marie", verified: true, method: "owner_device_session" }`.
+- Without one, the request runs as the counter terminal `usr_counter` (employee level), `authority: { claimed: "usr_marie", verified: false, method: "counter_terminal" }`, and the gate is given `claim: { role: "owner" }`: anything an employee may do is allowed; anything only the owner may do is held and sent to her device (`needs_approval`, rule `owner_device_required` v1); anything the owner could not do either is denied.
+
+New ledger functions: `openOwnerSession(db, { human_id, minutes }): Promise<OwnerSession>`, `closeOwnerSession(db, human_id): Promise<void>`, `getOwnerSession(db, human_id): Promise<OwnerSession | null>` (must check `expires_at > now`; TTL deletion can lag a minute). `proposeAction` / `proposeDecided` accept `authority?: Authority` and store it on the action and in the `action.proposed` audit detail. `snapshot()` returns `owner_session` and `pending[].claimed_as`.
+
+New route: `POST /api/session` (owner key) body `{ open: boolean, minutes?: number }` returns `{ owner_session: OwnerSession | null }`.

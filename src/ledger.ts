@@ -9,6 +9,8 @@ import {
   type ActionStatus,
   type ActionType,
   type Actor,
+  type Authority,
+  type OwnerSession,
   type AuditEntry,
   type Evidence,
   type Identity,
@@ -393,6 +395,92 @@ export async function auditEvent(db: Db, e: AuditInput): Promise<void> {
   await txWrite(db, [], [e]);
 }
 
+// ---------- owner sessions (authority comes only from the owner's own device) ----------
+
+function cleanAuthority(a: Authority): Authority {
+  const out: Authority = { claimed: a.claimed, verified: !!a.verified, method: a.method };
+  if (a.session_expires_at !== undefined) out.session_expires_at = a.session_expires_at ?? null;
+  return out;
+}
+
+function sessionView(doc: AnyDoc, name: string): OwnerSession {
+  return {
+    human_id: doc.human_id,
+    name,
+    opened_at: new Date(doc.opened_at).toISOString(),
+    expires_at: new Date(doc.expires_at).toISOString(),
+  };
+}
+
+export async function openOwnerSession(
+  db: Db,
+  input: { human_id: string; minutes: number },
+): Promise<OwnerSession> {
+  const ident = await getIdentity(db, input.human_id);
+  if (!ident || !ident.active || ident.role !== "owner") {
+    throw new Error(`${input.human_id} is not an active owner; only the owner can open an owner session`);
+  }
+  const minutes = Number(input.minutes) > 0 ? Number(input.minutes) : 30;
+  const opened_at = new Date();
+  const expires_at = new Date(opened_at.getTime() + minutes * 60_000);
+  const doc = {
+    _id: `sess_${input.human_id}`,
+    shop_id: SHOP_ID,
+    human_id: input.human_id,
+    role: "owner",
+    opened_via: "owner_device",
+    opened_at,
+    expires_at,
+  };
+  await txWrite(
+    db,
+    [
+      {
+        model: {
+          name: "replaceOne",
+          namespace: `${db.databaseName}.sessions`,
+          filter: { _id: doc._id },
+          replacement: doc,
+          upsert: true,
+        },
+      },
+    ],
+    [
+      {
+        event: "session.opened",
+        actor: { human_id: input.human_id, role: "owner", agent_id: AGENT_ID },
+        detail: { expires_at: expires_at.toISOString(), opened_via: "owner_device" },
+      },
+    ],
+  );
+  return sessionView(doc, ident.name);
+}
+
+export async function closeOwnerSession(db: Db, human_id: string): Promise<void> {
+  const ident = await getIdentity(db, human_id);
+  await txWrite(
+    db,
+    [{ model: { name: "deleteOne", namespace: `${db.databaseName}.sessions`, filter: { _id: `sess_${human_id}` } } }],
+    [
+      {
+        event: "session.closed",
+        actor: { human_id, role: (ident?.role as string) ?? "owner", agent_id: AGENT_ID },
+        detail: {},
+      },
+    ],
+  );
+}
+
+/** The live session for this person, or null. Checks expires_at in code: TTL deletion can lag a minute. */
+export async function getOwnerSession(db: Db, human_id: string): Promise<OwnerSession | null> {
+  const [doc, ident] = await Promise.all([
+    db.collection<AnyDoc>("sessions").findOne({ _id: `sess_${human_id}` }),
+    getIdentity(db, human_id),
+  ]);
+  if (!doc || !(new Date(doc.expires_at).getTime() > Date.now())) return null;
+  return sessionView(doc, ident?.name ?? human_id);
+}
+
 interface ProposeInput {
   run_id: string;
   type: ActionType;
@@ -401,6 +489,7 @@ interface ProposeInput {
   evidence: Evidence[];
   params: ActionParams;
   undo_of?: string | null;
+  authority?: Authority;
 }
 
 function decisionStatus(d: PolicyDecision): {
@@ -462,7 +551,7 @@ async function insertAction(
     judged?.status === "allowed" &&
     input.type !== "undo" &&
     !!input.params?.item_id;
-  const [ident, currents] = await Promise.all([
+  const [ident, currents, , claimedIdent] = await Promise.all([
     getIdentity(db, input.actor.human_id),
     canBegin
       ? Promise.all(
@@ -474,7 +563,12 @@ async function insertAction(
         )
       : Promise.resolve(null),
     ensureHead(db),
+    input.authority?.claimed && input.authority.claimed !== input.actor.human_id
+      ? getIdentity(db, input.authority.claimed)
+      : Promise.resolve(null),
   ]);
+  const claimedName =
+    input.authority?.claimed === input.actor.human_id ? (ident?.name ?? null) : (claimedIdent?.name ?? null);
   const status: ActionStatus = canBegin
     ? "applying"
     : judged
@@ -507,6 +601,7 @@ async function insertAction(
       previous: currents ? (currents[i] ?? null) : null,
     })),
     undo_of: input.undo_of ?? null,
+    ...(input.authority ? { authority: cleanAuthority(input.authority) } : {}),
     created_at: now,
     updated_at: now,
   } as ActionDoc);
@@ -522,6 +617,9 @@ async function insertAction(
         utterance: doc.utterance.text,
         speaker_name: ident?.name ?? doc.actor.human_id,
         undo_of: doc.undo_of,
+        ...(doc.authority
+          ? { authority: doc.authority, claimed_name: claimedName ?? doc.authority.claimed }
+          : {}),
       }),
     },
   ];
@@ -1214,9 +1312,15 @@ export async function explain(
   ]);
   const ev = (name: string) => audit.find((e) => e.event === name);
   const proposed = ev("action.proposed");
-  const speaker = String(
-    proposed?.detail?.speaker_name ?? action.actor.human_id,
-  );
+  const authority = (action as AnyDoc).authority as Authority | undefined;
+  const unverifiedClaim =
+    !!authority && authority.verified === false && authority.claimed !== action.actor.human_id;
+  const claimedName = String(proposed?.detail?.claimed_name ?? authority?.claimed ?? "");
+  let speaker = String(proposed?.detail?.speaker_name ?? action.actor.human_id);
+  if (unverifiedClaim) speaker = speaker.charAt(0).toLowerCase() + speaker.slice(1);
+  // "asked for it at 3:12" -> "asked for it as Marie at 3:12" / "..., checked in from the owner's device."
+  const asWho = unverifiedClaim ? ` as ${claimedName}` : "";
+  const checkedIn = authority?.verified && authority.method === "owner_device_session" ? ", checked in from the owner's device" : "";
   const target_item =
     action.params.item_id ?? original?.params.item_id ?? item_id;
   const name = (await itemName(db, target_item)) ?? "That item";
@@ -1228,22 +1332,22 @@ export async function explain(
   switch (action.type) {
     case "start_promo":
       parts.push(
-        `${subj} ${verb} ${p.discount_pct} percent off because ${speaker} asked for it at ${at}.`,
+        `${subj} ${verb} ${p.discount_pct} percent off because ${speaker} asked for it${asWho} at ${at}${checkedIn}.`,
       );
       break;
     case "set_price":
       parts.push(
-        `${subj} ${verb} ${money(p.price ?? 0)} because ${speaker} asked for it at ${at}.`,
+        `${subj} ${verb} ${money(p.price ?? 0)} because ${speaker} asked for it${asWho} at ${at}${checkedIn}.`,
       );
       break;
     case "mark_sold_out":
       parts.push(
-        `${subj} ${verb} marked sold out because ${speaker} said so at ${at}.`,
+        `${subj} ${verb} marked sold out because ${speaker} said so${asWho} at ${at}${checkedIn}.`,
       );
       break;
     case "mark_available":
       parts.push(
-        `${subj} ${verb} back on because ${speaker} said so at ${at}.`,
+        `${subj} ${verb} back on because ${speaker} said so${asWho} at ${at}${checkedIn}.`,
       );
       break;
     case "undo": {
@@ -1251,7 +1355,7 @@ export async function explain(
         ? summarize(original.type, original.params, name)
         : "the last change";
       parts.push(
-        `${subj} ${verb} back to how it was because ${speaker} asked to undo ${what} at ${at}.`,
+        `${subj} ${verb} back to how it was because ${speaker} asked${asWho} to undo ${what} at ${at}${checkedIn}.`,
       );
       break;
     }
@@ -1264,10 +1368,14 @@ export async function explain(
     const reason = String(
       held.detail?.reason ?? "it was over the speaker's limit",
     );
-    parts.push(`${reason.replace(/\.$/, "")}, so it was held.`);
+    if (held.detail?.rule_id === "owner_device_required") {
+      parts.push("Nobody was checked in as the owner, so it was held.");
+    } else {
+      parts.push(`${reason.replace(/\.$/, "")}, so it was held.`);
+    }
     if (granted)
       parts.push(
-        `${String(granted.detail?.approver_name ?? granted.actor.human_id)} approved it.`,
+        `${String(granted.detail?.approver_name ?? granted.actor.human_id)} approved it from the owner's device.`,
       );
   } else if (allowed) {
     const rule = String(allowed.detail?.rule_id ?? "a rule").replace(/_/g, " ");
@@ -1329,7 +1437,7 @@ function tillView(d: AnyDoc): TillView {
 
 export async function snapshot(db: Db): Promise<Snapshot> {
   const q = { shop_id: SHOP_ID };
-  const [sign, menu, till, ctl, pendingDocs, idents, items] = await Promise.all(
+  const [sign, menu, till, ctl, pendingDocs, idents, items, sess] = await Promise.all(
     [
       db.collection<AnyDoc>("target_sign").find(q).toArray(),
       db.collection<AnyDoc>("target_menu").find(q).toArray(),
@@ -1349,6 +1457,7 @@ export async function snapshot(db: Db): Promise<Snapshot> {
         .collection<AnyDoc>("menu_items")
         .find(q, { projection: { name_en: 1 } })
         .toArray(),
+      db.collection<AnyDoc>("sessions").findOne({ _id: "sess_usr_marie" }),
     ],
   );
   const nameOf = new Map(idents.map((i) => [i._id, i.name]));
@@ -1367,13 +1476,22 @@ export async function snapshot(db: Db): Promise<Snapshot> {
     utterance: a.utterance.text,
     reason: a.policy.reason ?? "",
     created_at: a.created_at.toISOString(),
+    claimed_as:
+      a.authority && a.authority.verified === false && a.authority.claimed !== a.actor.human_id
+        ? (nameOf.get(a.authority.claimed) ?? a.authority.claimed)
+        : null,
   }));
+  const owner_session =
+    sess && new Date(sess.expires_at).getTime() > Date.now()
+      ? sessionView(sess, nameOf.get(sess.human_id) ?? sess.human_id)
+      : null;
   return {
     sign: sortIt(sign).map(signView),
     menu: sortIt(menu).map(signView),
     till: sortIt(till).map(tillView),
     halted: !!ctl?.halt,
     pending,
+    owner_session,
   };
 }
 

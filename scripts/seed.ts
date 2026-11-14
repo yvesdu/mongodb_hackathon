@@ -121,6 +121,15 @@ const RULES = [
     { missing_fr_text: true },
     "Every sign needs French text.",
   ),
+  // Marker rule: the gate never matches it as an ordinary rule.
+  rule(
+    "owner_device_required",
+    "deny",
+    ["*"],
+    ["owner"],
+    { requires_owner_device: true },
+    "Owner commands need the owner's own device. Nobody is checked in as the owner, so this was sent to her phone.",
+  ),
 ];
 
 export async function seed(
@@ -131,6 +140,7 @@ export async function seed(
   await applyValidators(db, log);
   if (reset) {
     for (const c of [
+      "sessions",
       "actions",
       "audit",
       "target_sign",
@@ -156,6 +166,14 @@ export async function seed(
       shop_id: SHOP_ID,
       kind: "human",
       name: "Sam",
+      role: "employee",
+      active: true,
+    },
+    {
+      _id: "usr_counter",
+      shop_id: SHOP_ID,
+      kind: "human",
+      name: "Someone at the counter",
       role: "employee",
       active: true,
     },
@@ -262,7 +280,7 @@ export async function seed(
       .updateOne({ _id: SHOP_ID }, { $setOnInsert: control }, { upsert: true });
 
   log(
-    `seeded ${db.databaseName}: 3 identities, ${RULES.length} rules, ${ITEMS.length} menu items, ` +
+    `seeded ${db.databaseName}: ${identities.length} identities, ${RULES.length} rules, ${ITEMS.length} menu items, ` +
       `${ITEMS.length * 3} target docs, control${reset ? " (reset)" : ""}`,
   );
 }

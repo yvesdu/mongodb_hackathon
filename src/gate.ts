@@ -27,6 +27,8 @@ const PUBLISHES_TEXT: ActionType[] = ["start_promo"];
 function matches(rule: Policy, type: ActionType, role: Role): boolean {
   return (
     rule.status === "active" &&
+    // marker rules (owner_device_required) are never ordinary allow/deny rules
+    rule.conditions?.requires_owner_device !== true &&
     (rule.actions.includes("*") || rule.actions.includes(type)) &&
     (rule.roles.includes("*") || rule.roles.includes(role))
   );
@@ -199,6 +201,36 @@ function decide(
   };
 }
 
+const OWNER_DEVICE_RULE = "owner_device_required";
+const OWNER_DEVICE_REASON =
+  "Owner commands need the owner's own device. Nobody is checked in as the owner, so this was sent to her phone.";
+
+/**
+ * An unverified "I'm the owner" claim from the shared counter: employee-level rights apply; anything
+ * only the owner may do is held for her device; anything the owner could not do either gets the
+ * owner-level deny (the real limit).
+ */
+function decideWithClaim(
+  type: ActionType,
+  params: ActionParams,
+  role: Role,
+  basePrice: number | null,
+  rules: Policy[],
+  claim: GateInput["claim"],
+): PolicyDecision {
+  const d = decide(type, params, role, basePrice, rules);
+  if (claim?.role !== "owner" || role === "owner" || d.decision === "allow") return d;
+  const asOwner = decide(type, params, "owner", basePrice, rules);
+  if (asOwner.decision !== "allow") return asOwner;
+  const marker = rules.find((r) => r.rule_id === OWNER_DEVICE_RULE && r.status === "active");
+  return {
+    decision: "needs_approval",
+    rule_id: OWNER_DEVICE_RULE,
+    version: marker ? marker.version : 1,
+    reason: marker?.reason_en || OWNER_DEVICE_REASON,
+  };
+}
+
 export function evaluate(input: GateInput): PolicyDecision {
   try {
     const role = input.actor?.role;
@@ -221,7 +253,8 @@ export function evaluate(input: GateInput): PolicyDecision {
           version: 0,
           reason: "There is no change to undo.",
         };
-      const d = decide(orig.type, orig.params ?? {}, role, base, rules);
+      const d = decideWithClaim(orig.type, orig.params ?? {}, role, base, rules, input.claim);
+      if (d.rule_id === OWNER_DEVICE_RULE) return d;
       const what = ACTION_WORDS[orig.type];
       if (d.decision === "allow")
         return {
@@ -239,7 +272,7 @@ export function evaluate(input: GateInput): PolicyDecision {
       };
     }
 
-    return decide(input.type, input.params ?? {}, role, base, rules);
+    return decideWithClaim(input.type, input.params ?? {}, role, base, rules, input.claim);
   } catch (e) {
     return {
       decision: "deny",

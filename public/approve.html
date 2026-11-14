@@ -159,7 +159,19 @@
       body.is-halted .halted {
         display: block;
       }
-    </style>
+      .checkin { border-radius: 16px; padding: 14px; margin-bottom: 14px; border: 1px solid var(--line); background: var(--card); }
+  .checkin h2 { margin: 0 0 6px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); }
+  .checkin .msg { font-size: 16px; line-height: 1.4; }
+  .checkin.on { border-color: var(--ok); background: rgba(92, 201, 138, 0.1); }
+  .checkin.on .msg b { color: var(--ok); }
+  .checkin.off { border-color: var(--held); }
+  .checkin button { width: 100%; margin-top: 12px; border: 0; border-radius: 14px; padding: 18px 10px; font: 800 18px Inter, sans-serif; cursor: pointer; }
+  .checkin .go { background: var(--ok); color: #0d2417; }
+  .checkin .leave { background: transparent; color: var(--text); border: 2px solid var(--line); }
+  .checkin button:disabled { opacity: .5; }
+  .claim { margin: 6px 0 4px; padding: 10px 12px; border-radius: 10px; background: rgba(242, 181, 68, 0.14); border: 1px solid var(--held); color: var(--held); font-weight: 700; font-size: 15px; }
+  .claim small { display: block; font-weight: 500; color: var(--text); margin-top: 2px; }
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -172,6 +184,7 @@
         The shop is halted. Approved changes will not publish until it is
         cleared.
       </div>
+      <div class="checkin" id="checkin"></div>
       <div id="list"></div>
     </div>
     <div class="toast" id="toast" role="status"></div>
@@ -195,7 +208,55 @@
           if (!isFinite(s)) return "";
           return s < 60 ? s + "s ago" : Math.round(s / 60) + " min ago";
         }
+        // ---------- owner check-in (session from this device)
+        var lastState = null, sessionBusy = false, checkinKey = null;
+        var checkin = document.getElementById("checkin");
+        function fmtClock(iso) {
+          var d = new Date(iso);
+          return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        }
+        function drawCheckin() {
+          var left = YC.ownerLeftMs(lastState);
+          var os = lastState && lastState.owner_session;
+          var key = left > 0 ? "on|" + os.expires_at : "off";
+          if (key === checkinKey) {
+            if (left > 0) document.getElementById("left").textContent = YC.mmss(left);
+            return;
+          }
+          checkinKey = key;
+          if (left > 0) {
+            checkin.className = "checkin on";
+            checkin.innerHTML = '<h2>Owner check-in</h2><div class="msg"><b>Checked in</b> until ' + esc(fmtClock(os.expires_at)) +
+              ' (<span id="left">' + YC.mmss(left) + "</span> left). Requests made as you at the counter run as the owner.</div>" +
+              '<button class="leave" type="button" data-open="0"' + (sessionBusy ? " disabled" : "") + ">I've left</button>";
+          } else {
+            checkin.className = "checkin off";
+            checkin.innerHTML = '<h2>Owner check-in</h2><div class="msg">You are not checked in. Requests made in your name at the counter are held and sent here.</div>' +
+              '<button class="go" type="button" data-open="1"' + (sessionBusy ? " disabled" : "") + ">I'm at the counter</button>";
+          }
+        }
+        checkin.addEventListener("click", async function (e) {
+          var b = e.target.closest("button[data-open]");
+          if (!b || sessionBusy) return;
+          var open = b.getAttribute("data-open") === "1";
+          sessionBusy = true;
+          b.disabled = true;
+          try {
+            await YC.api("/api/session", { json: open ? { open: true, minutes: 10 } : { open: false } });
+            toast(open ? "Checked in for 10 minutes." : "Checked out.");
+          } catch (err) {
+            toast("Check-in failed: " + err.message);
+          } finally {
+            sessionBusy = false;
+            checkinKey = null; // redraw (state push redraws content)
+            drawCheckin();
+          }
+        });
+        setInterval(drawCheckin, 1000);
+
         function render(s) {
+          lastState = s;
+          drawCheckin();
           document.body.classList.toggle("is-halted", !!s.halted);
           var p = s.pending || [];
           if (!p.length) {
@@ -206,7 +267,12 @@
           list.innerHTML = p
             .map(function (a) {
               return (
-                '<div class="card"><div class="who"><b>' +
+                '<div class="card">' +
+                (a.claimed_as
+                  ? '<div class="claim">⚠ ' + esc(a.requested_by) + ", speaking as " + esc(a.claimed_as) +
+                    "<small>Someone at the counter, speaking as " + esc(a.claimed_as) + " — was that you?</small></div>"
+                  : "") +
+                '<div class="who"><b>' +
                 esc(a.requested_by) +
                 "</b> (" +
                 esc(a.role) +
@@ -250,7 +316,6 @@
             });
           }
         });
-        setInterval(function () {}, 30000);
         YC.connect(render, function (st) {
           document.getElementById("conn").textContent =
             st === "live" ? "" : "· " + st;

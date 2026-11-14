@@ -3,6 +3,8 @@
 
 export const SHOP_ID = "shop_demo";
 export const AGENT_ID = "agent_yeschef_v1";
+/** The shared counter terminal. It is trusted at employee level only: nobody at it is verified. */
+export const COUNTER_ID = "usr_counter";
 
 export type Role = "owner" | "employee";
 export type ActionType =
@@ -50,6 +52,7 @@ export interface PolicyConditions {
   max_change_pct?: number; // new price within n% of base_price
   min_price?: number; // params.price must be >= n
   missing_fr_text?: boolean; // deny rule: action publishes text and params.text_fr is empty
+  requires_owner_device?: boolean; // marker rule: owner authority needs a live session opened from the owner's own device
 }
 
 export interface Policy {
@@ -134,6 +137,22 @@ export interface Evidence {
   confidence?: number | null;
 }
 
+/** Whose authority an action ran under, and how that was established. */
+export interface Authority {
+  claimed: string; // the human_id the speaker selected at the counter
+  verified: boolean; // true only when that person has a live session opened from their own device
+  method: "owner_device_session" | "counter_terminal";
+  session_expires_at?: string | null;
+}
+
+/** A time-limited owner session, opened from the owner's own device and stored in Atlas (TTL index). */
+export interface OwnerSession {
+  human_id: string;
+  name: string;
+  opened_at: string; // ISO
+  expires_at: string; // ISO
+}
+
 export interface ActionParams {
   item_id?: string;
   price?: number;
@@ -173,6 +192,7 @@ export interface ActionDoc {
   policy: PolicyDecision;
   targets: TargetState[];
   undo_of: string | null;
+  authority?: Authority;
   created_at: Date;
   updated_at: Date;
 }
@@ -230,6 +250,9 @@ export interface GateInput {
   item: MenuItem | null;
   rules: Policy[]; // active rules for the shop
   original?: ActionDoc | null; // for undo: the action being undone
+  // The role the speaker selected but could not prove (no live session from their own device).
+  // actor.role is then the counter terminal's own level ("employee").
+  claim?: { role: Role } | null;
 }
 
 // ---------- State pushed to every screen ----------
@@ -261,6 +284,7 @@ export interface PendingApproval {
   role: Role;
   summary: string; // "20% off Muffin"
   utterance: string;
+  claimed_as?: string | null; // display name the requester selected but could not prove, e.g. "Marie"
   reason: string; // why it was held, e.g. "Employees may run promos up to 10% off."
   created_at: string;
 }
@@ -289,6 +313,7 @@ export interface ShopState {
   till: TillView[];
   halted: boolean;
   pending: PendingApproval[];
+  owner_session: OwnerSession | null;
   trace: RunTrace | null;
   updatedAt: number;
 }
@@ -299,6 +324,7 @@ export interface Snapshot {
   till: TillView[];
   halted: boolean;
   pending: PendingApproval[];
+  owner_session: OwnerSession | null;
 }
 
 // ---------- HTTP API results ----------
