@@ -55,7 +55,7 @@ export default {
 
         if (path === "/api/config" && post) {
           if (!isCounter) return json({ error: "counter key required" }, 401);
-          return json(await (await shop()).config((await request.json()) as { public_url?: string | null; slow?: boolean }));
+          return json(await (await shop()).config((await request.json()) as { public_url?: string | null; slow?: boolean; reanchor?: boolean }));
         }
 
         // Approving a held request needs the owner's key (stands in for the owner's device login).

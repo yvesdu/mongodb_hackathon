@@ -2,7 +2,7 @@ import { Agent, type Connection } from "agents";
 import { MongoClient, type Db } from "mongodb";
 import * as ledger from "./ledger";
 import { handleApproval, handleUtterance } from "./orchestrator";
-import { AGENT_ID, type Env, type RunTrace, type ShopState } from "./types";
+import { AGENT_ID, SHOP_ID, type Env, type RunTrace, type ShopState } from "./types";
 
 const WATCHED = ["target_sign", "target_menu", "target_till", "policies", "control", "actions"];
 
@@ -134,6 +134,7 @@ export class YesChefAgent extends Agent<Env, ShopState> {
       say: `Someone changed the ${system} directly, chef. No rule allowed it, so I put it back.`,
       done: true,
     });
+    this.ctx.waitUntil(this.anchorHead());
     this.queueRefresh();
   }
 
@@ -180,6 +181,7 @@ export class YesChefAgent extends Agent<Env, ShopState> {
   /** One spoken or typed sentence. */
   async utterance(input: { human_id: string; text: string; stt: "elevenlabs" | "typed" }) {
     const out = await handleUtterance(this.db(), await this.#runEnv(), input, this.#emit);
+    this.ctx.waitUntil(this.anchorHead());
     await this.refresh();
     return out;
   }
@@ -187,6 +189,7 @@ export class YesChefAgent extends Agent<Env, ShopState> {
   /** The owner's answer to a held request. */
   async approve(input: { action_id: string; approve: boolean }) {
     const out = await handleApproval(this.db(), await this.#runEnv(), { ...input, approver_id: "usr_marie" }, this.#emit);
+    this.ctx.waitUntil(this.anchorHead());
     await this.refresh();
     return out;
   }
@@ -199,12 +202,14 @@ export class YesChefAgent extends Agent<Env, ShopState> {
       role: (who?.role as any) ?? "owner",
       agent_id: AGENT_ID,
     });
+    this.ctx.waitUntil(this.anchorHead());
     await this.refresh();
     return { halt: !!input.halt };
   }
 
   async record(action_id: string | null) {
-    return ledger.getRecord(this.db(), action_id);
+    const [rec, anchor] = await Promise.all([ledger.getRecord(this.db(), action_id), this.checkAnchor()]);
+    return rec ? { ...rec, chain: { ...rec.chain, anchor } } : rec;
   }
 
   async actions(limit: number) {
@@ -212,7 +217,46 @@ export class YesChefAgent extends Agent<Env, ShopState> {
   }
 
   async chain() {
-    return ledger.verifyChain(this.db());
+    const [check, anchor] = await Promise.all([ledger.verifyChain(this.db()), this.checkAnchor()]);
+    return { ...check, anchor };
+  }
+
+  // ---- Anchor: the head of the audit chain, remembered outside Atlas ----
+  // A hash chain shows an edited entry, but someone who controls the database could rewrite or
+  // truncate the whole chain consistently. The agent therefore keeps the last head it saw
+  // (sequence number and hash) in its own storage, and the check compares Atlas against it.
+
+  #readAnchor(): { seq: number; hash: string; at: string } | null {
+    const row = this.sql<{ v: string }>`SELECT v FROM kv WHERE k = 'anchor'`[0];
+    return row?.v ? JSON.parse(row.v) : null;
+  }
+
+  /** Does the entry the anchor points at still exist in Atlas with the same hash? */
+  async checkAnchor() {
+    const a = this.#readAnchor();
+    if (!a) return null;
+    if (a.seq === 0) return { seq: 0, hash: a.hash, at: a.at, matches: true };
+    const entry = await this.db()
+      .collection("audit")
+      .findOne({ shop_id: SHOP_ID, seq: a.seq }, { projection: { hash: 1 } });
+    return { seq: a.seq, hash: a.hash.slice(0, 12), at: a.at, matches: !!entry && entry.hash === a.hash };
+  }
+
+  /** Move the anchor to the current head, but only if history up to the old anchor is unchanged. */
+  async anchorHead(force = false) {
+    try {
+      const db = this.db();
+      if (!force) {
+        const current = await this.checkAnchor();
+        if (current && !current.matches) return; // keep the old anchor so the mismatch stays visible
+      }
+      const control = await db.collection("control").findOne({ _id: SHOP_ID } as any);
+      if (!control) return;
+      const next = { seq: control.audit_seq ?? 0, hash: control.last_hash ?? "genesis", at: new Date().toISOString() };
+      this.sql`INSERT OR REPLACE INTO kv (k, v) VALUES ('anchor', ${JSON.stringify(next)})`;
+    } catch (err) {
+      console.error("anchor failed", err);
+    }
   }
 
   /**
@@ -220,7 +264,8 @@ export class YesChefAgent extends Agent<Env, ShopState> {
    * where phones can reach this shop (a tunnel to the laptop), and slow mode
    * (a pause between targets so the kill switch can be shown mid-run).
    */
-  async config(input?: { public_url?: string | null; slow?: boolean }) {
+  async config(input?: { public_url?: string | null; slow?: boolean; reanchor?: boolean }) {
+    if (input?.reanchor) await this.anchorHead(true);
     if (input && "public_url" in input) {
       const v = (input.public_url ?? "").replace(/\/$/, "");
       this.sql`INSERT OR REPLACE INTO kv (k, v) VALUES ('public_url', ${v})`;
