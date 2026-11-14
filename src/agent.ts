@@ -178,20 +178,34 @@ export class YesChefAgent extends Agent<Env, ShopState> {
     this.setState({ ...this.state, trace, updatedAt: Date.now() });
   };
 
+  // The agent handles one command at a time. Two changes arriving together (someone speaking while
+  // the owner taps Approve) run one after the other, so neither sees a half-written target.
+  // The stop switch and the owner check-in do not wait in this queue: a stop must land mid-run.
+  #queue: Promise<unknown> = Promise.resolve();
+  #inOrder<T>(job: () => Promise<T>): Promise<T> {
+    const run = this.#queue.then(job, job);
+    this.#queue = run.catch(() => {});
+    return run;
+  }
+
   /** One spoken or typed sentence. */
   async utterance(input: { human_id: string; text: string; stt: "elevenlabs" | "typed" }) {
-    const out = await handleUtterance(this.db(), await this.#runEnv(), input, this.#emit);
-    this.ctx.waitUntil(this.anchorHead());
-    await this.refresh();
-    return out;
+    return this.#inOrder(async () => {
+      const out = await handleUtterance(this.db(), await this.#runEnv(), input, this.#emit);
+      this.ctx.waitUntil(this.anchorHead());
+      await this.refresh();
+      return out;
+    });
   }
 
   /** The owner's answer to a held request. */
   async approve(input: { action_id: string; approve: boolean }) {
-    const out = await handleApproval(this.db(), await this.#runEnv(), { ...input, approver_id: "usr_marie" }, this.#emit);
-    this.ctx.waitUntil(this.anchorHead());
-    await this.refresh();
-    return out;
+    return this.#inOrder(async () => {
+      const out = await handleApproval(this.db(), await this.#runEnv(), { ...input, approver_id: "usr_marie" }, this.#emit);
+      this.ctx.waitUntil(this.anchorHead());
+      await this.refresh();
+      return out;
+    });
   }
 
   /**

@@ -221,19 +221,101 @@ async function txWrite(
   ops: Op[],
   audits: AuditInput[],
 ): Promise<AuditEntry[]> {
+  return withWriteLock(db, () => txWriteLocked(db, ops, audits));
+}
+
+// ---------- write serialisation and transient-error retry ----------
+
+/** One promise chain per database: ledger write transactions in this process run strictly one at a time. */
+const LOCKS = new Map<string, Promise<unknown>>();
+
+async function withWriteLock<T>(db: Db, fn: () => Promise<T>): Promise<T> {
+  const key = db.databaseName;
+  const prev = LOCKS.get(key) ?? Promise.resolve();
+  const run = prev.catch(() => {}).then(fn);
+  const tail = run.catch(() => {});
+  LOCKS.set(key, tail);
+  try {
+    return await run;
+  } finally {
+    if (LOCKS.get(key) === tail) LOCKS.delete(key);
+  }
+}
+
+function errorChain(err: any): any[] {
+  const out: any[] = [];
+  const seen = new Set<any>();
+  const walk = (e: any, depth: number) => {
+    if (!e || typeof e !== "object" || seen.has(e) || depth > 6) return;
+    seen.add(e);
+    out.push(e);
+    walk(e.cause, depth + 1);
+    walk(e.errorResponse, depth + 1);
+    walk(e.originalError, depth + 1);
+  };
+  walk(err, 0);
+  return out;
+}
+
+function hasLabel(e: any, label: string): boolean {
+  try {
+    if (typeof e.hasErrorLabel === "function" && e.hasErrorLabel(label)) return true;
+  } catch {
+    /* ignore */
+  }
+  const labels = e.errorLabels ?? e.errorLabelSet;
+  if (Array.isArray(labels)) return labels.includes(label);
+  if (labels instanceof Set) return labels.has(label);
+  return false;
+}
+
+/** Transient transaction errors: retry the whole transaction. */
+function isTransient(err: unknown): boolean {
+  if (err instanceof WrongStatus) return false;
+  return errorChain(err).some(
+    (e) =>
+      hasLabel(e, "TransientTransactionError") ||
+      hasLabel(e, "UnknownTransactionCommitResult") ||
+      e.code === 112 ||
+      e.code === 251 ||
+      /Please retry your operation/i.test(String(e.message ?? e.errmsg ?? "")),
+  );
+}
+
+const RETRY_DELAYS = [100, 200, 400, 800, 1600];
+const RETRY_BUDGET_MS = 20_000;
+
+async function commitWithRetry(session: ClientSession): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      await session.commitTransaction();
+      return;
+    } catch (e) {
+      // The commit may have landed: retry the commit itself (idempotent), not the transaction.
+      if (i < 3 && errorChain(e).some((x) => hasLabel(x, "UnknownTransactionCommitResult"))) continue;
+      throw e;
+    }
+  }
+}
+
+async function txWriteLocked(
+  db: Db,
+  ops: Op[],
+  audits: AuditInput[],
+): Promise<AuditEntry[]> {
   const ns = (c: string) => `${db.databaseName}.${c}`;
+  const started = Date.now();
+  let staleRetried = false;
+  let fresh = false; // re-read the chain head before this attempt
   for (let attempt = 0; ; attempt++) {
-    const head = attempt === 0 ? await ensureHead(db) : await readHead(db);
+    const head = fresh ? await readHead(db) : await ensureHead(db);
     const entries = await buildEntries(head, audits);
     const models: AnyClientBulkWriteModel<AnyDoc>[] = ops.map((o) => o.model);
     for (const e of entries)
       models.push({ name: "insertOne", namespace: ns("audit"), document: e });
     const casIdx = models.length;
     const newHead = entries.length
-      ? {
-          seq: head.seq + entries.length,
-          hash: entries[entries.length - 1].hash,
-        }
+      ? { seq: head.seq + entries.length, hash: entries[entries.length - 1].hash }
       : head;
     if (entries.length) {
       models.push({
@@ -243,29 +325,36 @@ async function txWrite(
         update: { $set: { audit_seq: newHead.seq, last_hash: newHead.hash } },
       });
     }
+    const session = db.client.startSession();
     try {
-      await inTxn(db, async (session) => {
-        const r = await db.client.bulkWrite(models, {
-          session,
-          ordered: true,
-          verboseResults: true,
-        });
-        ops.forEach((o, i) => {
-          if (o.mustMatch && (r.updateResults?.get(i)?.matchedCount ?? 0) !== 1)
-            throw new WrongStatus(o.mustMatch);
-        });
-        if (
-          entries.length &&
-          (r.updateResults?.get(casIdx)?.matchedCount ?? 0) !== 1
-        )
-          throw new StaleChain("chain head moved");
+      session.startTransaction();
+      const r = await db.client.bulkWrite(models, { session, ordered: true, verboseResults: true });
+      ops.forEach((o, i) => {
+        if (o.mustMatch && (r.updateResults?.get(i)?.matchedCount ?? 0) !== 1)
+          throw new WrongStatus(o.mustMatch);
       });
+      if (entries.length && (r.updateResults?.get(casIdx)?.matchedCount ?? 0) !== 1)
+        throw new StaleChain("chain head moved");
+      await commitWithRetry(session);
       HEADS.set(db.databaseName, newHead);
       for (const e of entries) delete e._id;
       return entries as AuditEntry[];
     } catch (e) {
-      if (attempt === 0 && (e instanceof StaleChain || isDupKey(e))) continue;
+      if (session.inTransaction()) await session.abortTransaction().catch(() => {});
+      if (!staleRetried && (e instanceof StaleChain || isDupKey(e))) {
+        staleRetried = true;
+        fresh = true;
+        continue;
+      }
+      const delay = RETRY_DELAYS[attempt] ?? 2000;
+      if (isTransient(e) && Date.now() - started + delay <= RETRY_BUDGET_MS) {
+        await sleep(delay);
+        fresh = true;
+        continue;
+      }
       throw e;
+    } finally {
+      await session.endSession().catch(() => {});
     }
   }
 }

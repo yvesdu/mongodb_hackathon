@@ -386,11 +386,6 @@ export async function handleUtterance(
       item_id: params.item_id ?? null,
     });
     if (final.status === "verified") {
-      step({
-        key: "verified",
-        label: "Read back and verified on sign, menu and till",
-        status: "ok",
-      });
       done.push(
         original ? describeUndo(original, item) : describe(type, params, item),
       );
@@ -501,11 +496,6 @@ export async function handleApproval(
   }
   const final = await run(db, env, resolved, step);
   if (final.status === "verified") {
-    step({
-      key: "verified",
-      label: "Read back and verified on sign, menu and till",
-      status: "ok",
-    });
     return finish(
       "verified",
       `Yes, chef. ${approver.name} approved it. ${what}.`,

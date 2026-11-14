@@ -419,6 +419,8 @@ async function main() {
       !c2.ok && c2.broken_at === 7,
       `broken_at=${c2.broken_at}`,
     );
+    await db.collection("audit").updateOne({ seq: 7 }, { $unset: { "detail.tampered": "" } });
+    check("untampered chain verifies again", (await L.verifyChain(db)).ok);
 
     // 7. database refuses an allowed action with no rule
     try {
@@ -508,6 +510,56 @@ async function main() {
       const lt = await targets(db, "item_latte");
       const out = kind === "mark_sold_out";
       check(`${kind} verified`, w.status === "verified" && lt.sign.sold_out === out && lt.till.available === !out);
+    }
+
+    // 8c. concurrency: two publishes and an audit event at once
+    {
+      const mk = (type: any, actor: Actor, item: string, params: any, rule: string) =>
+        L.proposeDecided(db, {
+          run_id: `run_check_${Date.now()}`, type, actor,
+          utterance: { text: `concurrent ${type}`, lang: "en", stt: "typed" }, evidence: [],
+          params: { item_id: item, ...params },
+          decision: { decision: "allow", rule_id: rule, version: 1, reason: null },
+        });
+      const t2 = Date.now();
+      const [x, y] = await Promise.all([
+        mk("set_price", marie, "item_coffee", { price: 3.75 }, "owner_prices"),
+        mk("mark_sold_out", sam, "item_muffin", {}, "staff_stock"),
+      ]);
+      const [px, py] = await Promise.all([
+        L.publish(db, x._id),
+        L.publish(db, y._id),
+        L.auditEvent(db, { event: "check.concurrent", actor: marie, detail: {} }),
+      ]);
+      const chain = await L.verifyChain(db);
+      check("two concurrent publishes + audit event all succeed, chain verifies",
+        px.status === "verified" && py.status === "verified" && chain.ok, `${Date.now() - t2} ms, chain ok=${chain.ok} entries=${chain.entries}`);
+    }
+
+    // 8d. a raw transaction from a second client holds control; a ledger write retries and succeeds
+    {
+      const other = new MongoClient(process.env.MONGODB_URI!);
+      const s2 = other.startSession();
+      s2.startTransaction();
+      await other.db(DB).collection<any>("control").updateOne({ _id: "shop_demo" }, { $set: { probe: true } }, { session: s2 });
+      const release = (async () => {
+        await new Promise((r) => setTimeout(r, 1500));
+        await s2.abortTransaction();
+        await s2.endSession();
+      })();
+      const t3 = Date.now();
+      let err = "";
+      try {
+        await L.auditEvent(db, { event: "check.blocked_by_other_txn", actor: marie, detail: {} });
+      } catch (e: any) {
+        err = e.message;
+      }
+      const took = Date.now() - t3;
+      await release;
+      await other.close();
+      const chain = await L.verifyChain(db);
+      check("ledger write retried past another client's open transaction",
+        !err && took >= 1000 && chain.ok, `${took} ms ${err}`);
     }
 
     // 9. stale chain head (another writer reset control): one re-read, chain stays valid
