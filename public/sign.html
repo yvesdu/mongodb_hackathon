@@ -337,11 +337,11 @@
         gap: 1.6vmin;
       }
       .qr .code {
-        background: var(--chalk);
-        padding: 0.8vmin;
+        background: #fff;
+        padding: 0.6vmin;
         border-radius: 6px;
-        width: clamp(70px, 14vmin, 200px);
-        height: clamp(70px, 14vmin, 200px);
+        width: clamp(104px, 17vmin, 210px);
+        height: clamp(104px, 17vmin, 210px);
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
       }
       .qr .code svg,
@@ -478,14 +478,27 @@
             var qr = qrcode(0, "M");
             qr.addData(target);
             qr.make();
-            document.getElementById("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+            document.getElementById("qr").innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
             document.getElementById("qr").title = target;
           } catch (e) {
             console.warn("QR failed", e);
           }
         }
         drawQR(location.origin);
-        YC.config().then(function (c) { if (c.public_url) drawQR(c.public_url); });
+        // Re-read the phone link every few seconds so the code follows the laptop's address without a reload.
+        var qrBase = location.origin;
+        function refreshQR() {
+          if (YC.MOCK) return;
+          fetch("/api/config")
+            .then(function (r) { return r.ok ? r.json() : {}; })
+            .then(function (c) {
+              var base = c && c.public_url ? String(c.public_url).replace(/\/+$/, "") : location.origin;
+              if (base !== qrBase) { qrBase = base; drawQR(base); }
+            })
+            .catch(function () {});
+        }
+        refreshQR();
+        setInterval(refreshQR, 5000);
 
         function sig(it) {
           return [

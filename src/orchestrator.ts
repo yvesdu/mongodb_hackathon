@@ -59,9 +59,9 @@ function describeUndo(original: ActionDoc, item: MenuItem | null | undefined): s
     case "set_price":
       return `Undone. ${name} is back to its previous price`;
     case "mark_sold_out":
-      return `Undone. ${plural(item)} are back on the menu`;
     case "mark_available":
-      return `Undone. ${plural(item)} are sold out again`;
+      // The item goes back to whatever it was before, which may itself have been sold out.
+      return `Undone. ${plural(item)} are back to how they were`;
     default:
       return "Undone";
   }

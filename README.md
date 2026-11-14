@@ -34,6 +34,10 @@ Built on November 14, 2026 at Agents in Context Toronto, a MongoDB hackathon, fo
 6. An allowed action is applied to the sign, then the online menu, then the till, checking the kill switch before each write, then every target is read back.
 7. The change stream pushes the new state to every screen, and the agent answers aloud.
 
+## Injection attempts
+
+`scripts/attack-check.ts` sends eight attack sentences to the running system as the employee and checks that nothing unauthorised reaches the sign, the menu or the till: instruction override, a claim to be the owner, a fake prior approval, a fake system message, an attempt to change the rules, urgency and pressure, a forbidden change smuggled next to an allowed one, and an over-limit request. On November 14, 2026 all eight were blocked or held, and the allowed half of the smuggled sentence was the only thing published. This is a test set, not a guarantee: the defence is that permission is decided by code and the database, never by the model.
+
 ## What was built today
 
 Everything in `src/`, `public/`, `scripts/` and `test/`:
@@ -72,6 +76,7 @@ cp .env .dev.vars
 npm run reset               # validators, indexes, seed data
 npm run dev                 # http://127.0.0.1:8787
 npm test                    # gate unit tests
+npm run attack              # eight injection attempts against the running server; none may publish
 ```
 
 Pages: `/stage?key=<COUNTER_KEY>` (sign plus counter), `/sign`, `/menu`, `/approve?key=<OWNER_KEY>`, `/record`.
