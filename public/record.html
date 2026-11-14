@@ -338,6 +338,19 @@
           return out + esc(text.slice(pos));
         }
 
+        function detailText(d) {
+          if (!d || typeof d !== "object") return "";
+          var parts = [];
+          if (d.target) parts.push(d.target);
+          if (d.rule_id) parts.push(d.rule_id + (d.version != null ? " v" + d.version : ""));
+          if (d.approver_name) parts.push("by " + d.approver_name);
+          if (d.changes && typeof d.changes === "object") parts.push(Object.keys(d.changes).map(function (k) { return k + "=" + JSON.stringify(d.changes[k]); }).join(", "));
+          if (d.field) parts.push(d.field);
+          if (d.undo_action_id) parts.push("undone by " + d.undo_action_id);
+          if (!parts.length) { var j = JSON.stringify(d); parts.push(j === "{}" ? "" : j); }
+          var t = parts.join(" · ");
+          return t.length > 90 ? t.slice(0, 89) + "…" : t;
+        }
         function summarize(name, d) {
           if (!d) return '<span class="small">none</span>';
           var parts = [];
@@ -459,6 +472,13 @@
             esc(JSON.stringify(a.params || {})) +
             "</div></section>";
 
+          var NAMES = { usr_marie: "Marie", usr_sam: "Sam" };
+          var heldRule = {}, approverName = NAMES[pol.approved_by] || pol.approved_by;
+          (rv.audit || []).forEach(function (e) {
+            var d = e.detail || {};
+            if (e.event === "policy.held") heldRule = { rule_id: d.rule_id, version: d.version };
+            if (e.event === "approval.granted" && d.approver_name) approverName = d.approver_name;
+          });
           h +=
             '<section class="stage ' +
             polCls +
@@ -473,13 +493,12 @@
               ? '<div style="margin-top:4px">' + esc(pol.reason) + "</div>"
               : "") +
             (pol.approved_by
-              ? '<div style="margin-top:6px">' +
-                statusBadge("approved") +
-                " by <b>" +
-                esc(pol.approved_by) +
-                "</b> " +
-                fmtTime(pol.approved_at) +
-                "</div>"
+              ? '<div style="margin-top:8px">' + statusBadge("held") +
+                " Held by rule <span class=mono>" + esc(heldRule.rule_id || pol.rule_id || "?") + "</span>" +
+                ((heldRule.version != null ? heldRule.version : pol.version) != null ? " v" + esc(heldRule.version != null ? heldRule.version : pol.version) : "") +
+                '</div><div style="margin-top:4px">' + statusBadge("approved") +
+                " Approved by <b>" + esc(approverName) + "</b> (<span class=mono>" + esc(pol.approved_by) + "</span>) at " +
+                fmtTime(pol.approved_at) + "</div>"
               : "") +
             "</section>";
 
@@ -534,7 +553,7 @@
             au.length +
             ")</h2>" +
             (au.length
-              ? '<table class="mono"><thead><tr><th>Seq</th><th>Time</th><th>Event</th><th>By</th><th>Hash</th></tr></thead><tbody>' +
+              ? '<table class="mono"><thead><tr><th>Seq</th><th>Time</th><th>Event</th><th>By</th><th>Detail</th><th>Hash</th></tr></thead><tbody>' +
                 au
                   .map(function (e) {
                     return (
@@ -546,6 +565,8 @@
                       esc(e.event) +
                       "</td><td>" +
                       esc((e.actor && e.actor.human_id) || "") +
+                      '</td><td class="small">' +
+                      esc(detailText(e.detail)) +
                       '</td><td title="prev ' +
                       esc(e.prev_hash) +
                       '">' +

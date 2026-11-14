@@ -504,6 +504,15 @@
           width: 100%;
         }
       }
+      /* trace: readable at projector distance, newest step kept in view */
+      .steps { max-height: 46vh; overflow-y: auto; scroll-behavior: smooth; }
+      .step .k { font-size: 15px; }
+      .step .l { font-size: 18px; }
+      .step .d { font-size: 15px; }
+      .trace-head .q { font-size: 15px; }
+      .slow { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--dim); margin-right: 10px; cursor: pointer; max-width: 300px; }
+      .slow input { width: 18px; height: 18px; accent-color: var(--accent); }
+      .kill > div:last-child { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
       /* narrow (stage iframe) safety */
       html, body { overflow-x: hidden; }
       .wrap > * { min-width: 0; }
@@ -611,6 +620,9 @@
           </div>
         </div>
         <div>
+          <label class="slow" title="Adds a pause between sign, menu and till so the stop switch can be shown mid-run">
+            <input type="checkbox" id="slow" disabled /> Slow mode: pause between targets (for showing the stop switch)
+          </label>
           <button class="kill-btn" id="halt" type="button">HALT</button>
           <button class="resume-btn" id="resume" type="button" hidden>
             Clear halt
@@ -1035,6 +1047,9 @@
               stepsEl.innerHTML = html;
               stepsEl.setAttribute("data-run", t.run_id);
               stepsEl.setAttribute("data-done", String(t.done));
+              var last = stepsEl.lastElementChild;
+              stepsEl.scrollTop = stepsEl.scrollHeight;
+              if (last && last.scrollIntoView) last.scrollIntoView({ block: "nearest" });
             }
           }
 
@@ -1088,6 +1103,20 @@
                 .join("")
             : '<div class="empty">Nothing waiting.</div>';
         }
+
+        // ---------- slow mode (GET/POST /api/config)
+        var slowEl = $("slow");
+        (YC.MOCK ? Promise.resolve({ slow: false }) : YC.api("/api/config"))
+          .then(function (c) { slowEl.checked = !!(c && c.slow); slowEl.disabled = false; })
+          .catch(function (e) { console.warn("config", e); slowEl.disabled = false; });
+        slowEl.addEventListener("change", function () {
+          var want = slowEl.checked;
+          slowEl.disabled = true;
+          (YC.MOCK ? Promise.resolve({ slow: want }) : YC.api("/api/config", { json: { slow: want } }))
+            .then(function (c) { slowEl.checked = c && typeof c.slow === "boolean" ? c.slow : want; })
+            .catch(function (e) { slowEl.checked = !want; $("err").textContent = "Slow mode change failed: " + e.message; })
+            .then(function () { slowEl.disabled = false; });
+        });
 
         var ownerKey = YC.qs.get("owner");
         if (ownerKey) {
