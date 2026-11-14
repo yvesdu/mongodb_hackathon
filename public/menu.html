@@ -170,7 +170,12 @@
         color: var(--muted);
         font-size: 14px;
       }
-    </style>
+          /* drawn art */
+      .row { grid-template-columns: 36px minmax(0, 1fr) auto; }
+      .row .art { width: 36px; height: 36px; margin-top: 2px; }
+      .row .promo, .row .add { grid-column: 2 / -1; }
+      .sold .art { opacity: 0.35; filter: grayscale(1); }
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -216,7 +221,7 @@
                 (it.sold_out ? " sold" : "") +
                 '" data-id="' +
                 esc(it.item_id) +
-                '"><div><div class="name">' +
+                '">' + YC.art(it.item_id) + '<div><div class="name">' +
                 esc(it.text_en) +
                 '</div><div class="fr">' +
                 esc(it.text_fr) +

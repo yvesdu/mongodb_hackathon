@@ -192,9 +192,18 @@
       .status.offline {
         color: var(--no);
       }
-    </style>
+          /* drawn art + awning */
+      #awning { height: 32px; line-height: 0; }
+      #awning svg { display: block; }
+      .page { height: calc(100vh - 32px); padding-top: min(3.5vh, 3.5vw); }
+      .item { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .item .art { width: max(48px, min(9vh, 9vw, 112px)); height: max(48px, min(9vh, 9vw, 112px)); grid-row: 1 / span 2; align-self: center; }
+      .item .promo { grid-column: 2 / -1; }
+      .sold .art { opacity: 0.35; filter: grayscale(1); }
+</style>
   </head>
   <body>
+    <div id="awning" aria-hidden="true"></div>
     <div class="page">
       <div class="halt" role="alert">Updates paused</div>
       <header>
@@ -242,6 +251,7 @@
         YC.config().then(function (c) {
           if (c.public_url) drawQR(c.public_url);
         });
+        document.getElementById("awning").innerHTML = YC.awning(32);
 
         function sig(it) {
           return [
@@ -285,6 +295,7 @@
                 '" data-id="' +
                 esc(it.item_id) +
                 '">' +
+                YC.art(it.item_id) +
                 '<div><div class="name">' +
                 esc(it.text_en) +
                 '</div><div class="fr">' +

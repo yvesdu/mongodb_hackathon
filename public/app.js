@@ -921,6 +921,54 @@
     return m + ":" + (sec < 10 ? "0" : "") + sec;
   }
 
+  // Original line drawings (drawn for this project): 2px navy strokes, butter fills.
+  var INK = "#14213D", BUT = "#FFC93C", OFF = "#FFFDF6";
+  var ART = {
+    item_coffee:
+      '<ellipse cx="32" cy="52" rx="24" ry="5" fill="' + OFF + '"/>' +
+      '<path d="M14 28 H48 V36 C48 46 41 51 31 51 C21 51 14 46 14 36 Z" fill="' + BUT + '"/>' +
+      '<path d="M48 31 C56 31 56 43 46 43" fill="none"/>' +
+      '<path d="M26 22 C22 18 30 15 26 9" fill="none"/>' +
+      '<path d="M37 22 C33 18 41 15 37 9" fill="none"/>',
+    item_latte:
+      '<path d="M20 12 H44 L41 56 H23 Z" fill="' + OFF + '"/>' +
+      '<path d="M21.5 33 H42.5 L41 56 H23 Z" fill="' + BUT + '"/>' +
+      '<path d="M20.8 22 C25 19 28 25 32 22 C36 19 39 25 43.2 22" fill="none"/>' +
+      '<path d="M22 44 H42" fill="none"/>' +
+      '<path d="M39 4 L36 19" fill="none"/>' +
+      '<path d="M16 58 H48" fill="none"/>',
+    item_croissant:
+      '<path d="M7 45 C7 15 57 15 57 45 C52 50 46 44 41 48 C36 52 28 52 23 48 C18 44 12 50 7 45 Z" fill="' + BUT + '"/>' +
+      '<path d="M19 28 L24 47" fill="none"/>' +
+      '<path d="M32 22 V49" fill="none"/>' +
+      '<path d="M45 28 L40 47" fill="none"/>',
+    item_muffin:
+      '<path d="M18 36 H46 L42 56 H22 Z" fill="' + OFF + '"/>' +
+      '<path d="M25 36 L26.5 56 M32 36 V56 M39 36 L37.5 56" fill="none"/>' +
+      '<path d="M13 37 C11 22 23 13 32 13 C41 13 53 22 51 37 Z" fill="' + BUT + '"/>' +
+      '<circle cx="25" cy="27" r="1.6" fill="' + INK + '" stroke="none"/>' +
+      '<circle cx="36" cy="22" r="1.6" fill="' + INK + '" stroke="none"/>' +
+      '<circle cx="41" cy="30" r="1.6" fill="' + INK + '" stroke="none"/>',
+    plate:
+      '<ellipse cx="32" cy="40" rx="25" ry="9" fill="' + OFF + '"/>' +
+      '<ellipse cx="32" cy="39" rx="14" ry="4" fill="none"/>',
+  };
+  /** Inline SVG drawing for an item id (falls back to a plate). */
+  function art(itemId, cls) {
+    return '<svg class="' + (cls || "art") + '" viewBox="0 0 64 64" aria-hidden="true" stroke="' + INK +
+      '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + (ART[itemId] || ART.plate) + "</svg>";
+  }
+  /** Scalloped café awning band, full width. */
+  function awning(h) {
+    h = h || 32;
+    return '<svg class="awning" width="100%" height="' + h + '" aria-hidden="true">' +
+      '<defs><pattern id="yc-awning" width="48" height="' + h + '" patternUnits="userSpaceOnUse">' +
+      '<path d="M0 -2 H24 V' + (h - 10) + ' A12 8 0 0 1 0 ' + (h - 10) + ' Z" fill="' + BUT + '" stroke="' + INK + '" stroke-width="2" stroke-linejoin="round"/>' +
+      '<path d="M24 -2 H48 V' + (h - 10) + ' A12 8 0 0 1 24 ' + (h - 10) + ' Z" fill="' + OFF + '" stroke="' + INK + '" stroke-width="2" stroke-linejoin="round"/>' +
+      '</pattern></defs><rect x="0" y="0" width="100%" height="' + h + '" fill="url(#yc-awning)"/>' +
+      '<line x1="0" y1="1" x2="100%" y2="1" stroke="' + INK + '" stroke-width="2"/></svg>';
+  }
+
   var configP = null;
   /** GET /api/config once: { public_url: string | null }. Never rejects. */
   function config() {
@@ -939,6 +987,8 @@
 
   window.YC = {
     config: config,
+    art: art,
+    awning: awning,
     ownerLeftMs: ownerLeftMs,
     mmss: mmss,
     MOCK: MOCK,
