@@ -202,6 +202,15 @@ const actionsValidator = {
         },
       ],
     },
+    // Separation of duties: the person who approves can never be the person who asked.
+    {
+      $expr: {
+        $or: [
+          { $ne: [{ $type: "$policy.approved_by" }, "string"] },
+          { $ne: ["$policy.approved_by", "$actor.human_id"] },
+        ],
+      },
+    },
   ],
 };
 

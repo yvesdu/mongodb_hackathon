@@ -596,6 +596,11 @@ export async function resolveApproval(
     getAction(db, action_id),
     getIdentity(db, input.approver.human_id),
   ]);
+  if (input.approver.human_id === a.actor.human_id) {
+    throw new Error(
+      `Separation of duties: ${ident?.name ?? input.approver.human_id} asked for this change, so someone else must approve it.`,
+    );
+  }
   const actor = {
     human_id: input.approver.human_id,
     role: input.approver.role,

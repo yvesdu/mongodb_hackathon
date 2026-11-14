@@ -351,6 +351,19 @@
           var t = parts.join(" · ");
           return t.length > 90 ? t.slice(0, 89) + "…" : t;
         }
+        // Copy of the chain head kept outside Atlas: catches a rewrite/truncation of the whole log.
+        function anchorBadge(c) {
+          var an = c && c.anchor;
+          if (!an) return "";
+          if (an.matches) {
+            if (!c.ok) return "";
+            return '<div class="chain ok" style="margin-top:8px">✓ Chain intact · ' + esc(c.entries) +
+              " entries · matches the anchor kept outside Atlas (entry #" + esc(an.seq) + ")" +
+              ' <span class="small mono" style="font-weight:500">' + esc(String(an.hash || "").slice(0, 10)) + "…</span></div>";
+          }
+          return '<div class="chain bad" style="margin-top:8px">✗ Audit log does not match the anchor kept outside Atlas (entry #' +
+            esc(an.seq) + ", anchored " + fmtTime(an.at) + "): history was rewritten or truncated</div>";
+        }
         function summarize(name, d) {
           if (!d) return '<span class="small">none</span>';
           var parts = [];
@@ -591,7 +604,9 @@
               : "✗ Chain broken at seq " + esc(c.broken_at)) +
             ' <span class="small" style="font-weight:500">' +
             esc(c.entries) +
-            " entries checked</span></div></section>";
+            " entries checked</span></div>" +
+            anchorBadge(c) +
+            "</section>";
 
           document.getElementById("trace").innerHTML = h;
         }

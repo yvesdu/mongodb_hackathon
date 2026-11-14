@@ -257,6 +257,23 @@ async function main() {
     });
     check("rejection -> rejected", r.status === "rejected");
 
+    // separation of duties
+    let sd = await propose(db, sam, "start_promo",
+      { item_id: "item_croissant", discount_pct: 25, text_en: "25% off", text_fr: "25 % de rabais" }, "25 off croissants");
+    sd = await L.recordDecision(db, sd._id, { decision: "needs_approval", rule_id: "staff_promos", version: 1, reason: "Employees may run promos up to 10% off." });
+    let codeRefused = "";
+    try { await L.resolveApproval(db, sd._id, { approve: true, approver: { human_id: "usr_sam", role: "employee" } }); }
+    catch (e: any) { codeRefused = e.message; }
+    check("code refuses self-approval", /Separation of duties/.test(codeRefused), codeRefused);
+    try {
+      await db.collection<any>("actions").updateOne({ _id: sd._id }, { $set: { "policy.approved_by": "usr_sam" } });
+      check("DB rejects self-approval (code 121)", false, "update succeeded");
+    } catch (e: any) {
+      check("DB rejects self-approval (code 121)", e.code === 121, `code=${e.code} ${JSON.stringify(e.errInfo?.details).slice(0, 160)}`);
+    }
+    sd = await L.resolveApproval(db, sd._id, { approve: true, approver: { human_id: "usr_marie", role: "owner" } });
+    check("approval by a different person still works", sd.status === "allowed" && sd.policy.approved_by === "usr_marie");
+
     // 4. blocked action leaves targets unchanged
     const latBefore = await targets(db, "item_latte");
     let b = await propose(
