@@ -425,13 +425,13 @@ async function main() {
       );
     }
 
-    // 8b. warm timing: one mark_sold_out, proposed -> verified
-    {
+    // 8b. warm timing: single actions, proposed -> verified (second run has a warm connection pool)
+    for (const kind of ["mark_sold_out", "mark_available", "mark_sold_out"] as const) {
       const t1 = Date.now();
       const marks: string[] = [];
       let w = await L.proposeDecided(db, {
         run_id: `run_check_${Date.now()}`,
-        type: "mark_sold_out",
+        type: kind,
         actor: sam,
         utterance: { text: "We're out of lattes", lang: "en", stt: "typed" },
         evidence: [],
@@ -442,9 +442,10 @@ async function main() {
       marks.push(`proposed+begin ${Date.now() - t1}`);
       w = await L.publish(db, w._id, { onStep: (s) => { marks.push(`${s.label} ${Date.now() - t1}`); } });
       const total = Date.now() - t1;
-      console.log(`TIME  warm mark_sold_out proposed->verified: ${total} ms  [${marks.join(" | ")}]`);
+      console.log(`TIME  ${kind} proposed->verified: ${total} ms  [${marks.join(" | ")}]`);
       const lt = await targets(db, "item_latte");
-      check("warm mark_sold_out verified", w.status === "verified" && lt.sign.sold_out === true && lt.till.available === false);
+      const out = kind === "mark_sold_out";
+      check(`${kind} verified`, w.status === "verified" && lt.sign.sold_out === out && lt.till.available === !out);
     }
 
     // 9. stale chain head (another writer reset control): one re-read, chain stays valid

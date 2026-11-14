@@ -299,6 +299,7 @@ export async function handleUtterance(
       params,
       undo_of: original?._id ?? null,
       decision,
+      begin: true, // an allowed action starts publishing in the same transaction that records the verdict
     });
     lap(`proposeDecided ${type}`);
     const what = original

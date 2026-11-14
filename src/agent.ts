@@ -33,8 +33,8 @@ export class YesChefAgent extends Agent<Env, ShopState> {
 
   db(): Db {
     this.#client ??= new MongoClient(this.env.MONGODB_URI, {
-      maxPoolSize: 5,
-      minPoolSize: 0,
+      maxPoolSize: 8,
+      minPoolSize: 5,
       serverSelectionTimeoutMS: 8000,
       ignoreUndefined: true,
     });
