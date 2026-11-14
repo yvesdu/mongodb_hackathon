@@ -12,9 +12,9 @@
 6. Slow mode is off.
 7. If the microphone fails, type the same sentence in the box and carry on.
 
-## Problem statement (about 20 seconds, before touching anything)
+## Problem statement (about 30 seconds, before touching anything)
 
-"Canada has more than a hundred thousand restaurants, cafés and bars, and almost all of them are small businesses. In a shop like that, the sign, the online menu and the till are three separate systems, and whoever is on shift keeps them in step. AI agents are now being offered to do that job. But an agent that changes prices is an agent anyone can talk to. So who is allowed to change what, and when the sign is wrong, who said so? This is Yes Chef."
+"Canada has over a hundred thousand restaurants, cafés and bars, and almost all of them are small businesses. An owner wants to change a price or run a discount on the spot, and to let the staff she trusts do the same. If an AI agent is going to do that by voice, three things have to be true: only the right people can make a change, the owner approves anything beyond their limits, and she can see afterwards who changed what. This is Yes Chef."
 
 Source for the figure: Innovation, Science and Economic Development Canada, Canadian Industry Statistics, food services and drinking places (NAICS 722): 105,169 establishments in 2025, 98.7% with fewer than 100 employees.
 
