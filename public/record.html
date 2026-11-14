@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yes Chef · Record</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #faf8f4;
+        --paper: #fff;
+        --ink: #1d1a16;
+        --dim: #6f675d;
+        --faint: #a59d92;
+        --line: #e7e0d5;
+        --ok: #23784a;
+        --ok-bg: #e3f3e9;
+        --no: #b8352a;
+        --no-bg: #fbe5e2;
+        --held: #a06a00;
+        --held-bg: #fdf1d6;
+        --mark: #ffe7a3;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #12100e;
+          --paper: #1c1916;
+          --ink: #f4efe7;
+          --dim: #a69d91;
+          --faint: #6e665c;
+          --line: #332d27;
+          --ok: #5cc98a;
+          --ok-bg: #173323;
+          --no: #ef6b5e;
+          --no-bg: #3a1714;
+          --held: #f2b544;
+          --held-bg: #3a2c10;
+          --mark: #5a4513;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 15px;
+        line-height: 1.45;
+      }
+      .layout {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 20px 16px 50px;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 300px;
+        gap: 20px;
+        align-items: start;
+      }
+      @media (max-width: 860px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 2px;
+        font-weight: 800;
+      }
+      .sub {
+        color: var(--dim);
+        font-size: 13px;
+        margin-bottom: 16px;
+      }
+      .mono {
+        font-family: "JetBrains Mono", ui-monospace, monospace;
+        font-size: 13px;
+      }
+      .trace {
+        position: relative;
+        padding-left: 26px;
+      }
+      .trace::before {
+        content: "";
+        position: absolute;
+        left: 9px;
+        top: 6px;
+        bottom: 6px;
+        width: 2px;
+        background: var(--line);
+      }
+      .stage {
+        position: relative;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px 14px;
+        margin-bottom: 12px;
+      }
+      .stage::before {
+        content: "";
+        position: absolute;
+        left: -23px;
+        top: 16px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--paper);
+        border: 2px solid var(--faint);
+      }
+      .stage.ok::before {
+        border-color: var(--ok);
+        background: var(--ok);
+      }
+      .stage.no::before {
+        border-color: var(--no);
+        background: var(--no);
+      }
+      .stage.held::before {
+        border-color: var(--held);
+        background: var(--held);
+      }
+      .stage h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--dim);
+        margin: 0 0 6px;
+        font-weight: 700;
+      }
+      .words {
+        font-size: 20px;
+        font-weight: 500;
+      }
+      mark {
+        background: var(--mark);
+        color: inherit;
+        border-radius: 4px;
+        padding: 0 2px;
+      }
+      mark sub {
+        font:
+          600 10px "JetBrains Mono",
+          monospace;
+        color: var(--dim);
+        margin-left: 2px;
+        vertical-align: baseline;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      td,
+      th {
+        text-align: left;
+        padding: 5px 6px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      th {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--faint);
+        font-weight: 600;
+      }
+      .badge {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 700;
+        padding: 2px 9px;
+        border-radius: 999px;
+      }
+      .b-ok {
+        background: var(--ok-bg);
+        color: var(--ok);
+      }
+      .b-no {
+        background: var(--no-bg);
+        color: var(--no);
+      }
+      .b-held {
+        background: var(--held-bg);
+        color: var(--held);
+      }
+      .b-dim {
+        background: var(--line);
+        color: var(--dim);
+      }
+      .arrow {
+        color: var(--faint);
+        padding: 0 6px;
+      }
+      .gate-line {
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .chain {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border-radius: 12px;
+        font-weight: 700;
+      }
+      .chain.ok {
+        background: var(--ok-bg);
+        color: var(--ok);
+      }
+      .chain.bad {
+        background: var(--no-bg);
+        color: var(--no);
+      }
+      aside {
+        position: sticky;
+        top: 16px;
+        background: var(--paper);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      aside h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--dim);
+        margin: 0 0 8px;
+      }
+      aside a {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        padding: 7px 8px;
+        border-radius: 8px;
+        border: 1px solid transparent;
+      }
+      aside a:hover {
+        background: var(--bg);
+      }
+      aside a.cur {
+        border-color: var(--line);
+        background: var(--bg);
+      }
+      aside .t {
+        font-weight: 600;
+        font-size: 13px;
+      }
+      aside .u {
+        color: var(--dim);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .err {
+        color: var(--no);
+      }
+      .small {
+        font-size: 12px;
+        color: var(--dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <main>
+        <h1>Action record</h1>
+        <div class="sub" id="sub">Loading…</div>
+        <div class="trace" id="trace"></div>
+      </main>
+      <aside>
+        <h2>Recent actions</h2>
+        <div id="actions" class="small">Loading…</div>
+      </aside>
+    </div>
+    <script src="/app.js"></script>
+    <script>
+      (function () {
+        var esc = YC.esc,
+          money = YC.money;
+        var currentId = YC.qs.get("action_id");
+
+        function statusBadge(s) {
+          var cls = /verified|allowed|applied|allow/.test(s)
+            ? "b-ok"
+            : /blocked|rejected|failed|halted|deny/.test(s)
+              ? "b-no"
+              : /pending|needs_approval|held/.test(s)
+                ? "b-held"
+                : "b-dim";
+          return '<span class="badge ' + cls + '">' + esc(s) + "</span>";
+        }
+        function fmtTime(iso) {
+          var d = new Date(iso);
+          return isNaN(d)
+            ? esc(iso || "")
+            : d.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+              });
+        }
+
+        function highlight(text, evidence) {
+          var spans = (evidence || [])
+            .filter(function (e) {
+              return e.span && e.span.length === 2 && e.span[1] > e.span[0];
+            })
+            .map(function (e) {
+              return { s: e.span[0], e: e.span[1], f: e.field };
+            })
+            .sort(function (a, b) {
+              return a.s - b.s;
+            });
+          var out = "",
+            pos = 0;
+          spans.forEach(function (sp) {
+            if (sp.s < pos || sp.e > text.length) return; // skip overlaps / bad spans
+            out +=
+              esc(text.slice(pos, sp.s)) +
+              "<mark>" +
+              esc(text.slice(sp.s, sp.e)) +
+              "<sub>" +
+              esc(sp.f) +
+              "</sub></mark>";
+            pos = sp.e;
+          });
+          return out + esc(text.slice(pos));
+        }
+
+        function summarize(name, d) {
+          if (!d) return '<span class="small">none</span>';
+          var parts = [];
+          if (d.price != null) parts.push(money(d.price));
+          if (name === "till") {
+            parts.push(d.available === false ? "sold out" : "available");
+            parts.push(
+              d.discount_pct ? d.discount_pct + "% off" : "no discount",
+            );
+          } else {
+            parts.push(d.sold_out ? "sold out" : "available");
+            parts.push(
+              d.promo_en
+                ? "promo “" +
+                    d.promo_en +
+                    "”" +
+                    (d.ends_at ? " until " + d.ends_at : "")
+                : "no promo",
+            );
+          }
+          return esc(parts.join(" · "));
+        }
+        function applyParams(name, prev, type, p) {
+          if (!prev) return null;
+          var d = JSON.parse(JSON.stringify(prev));
+          p = p || {};
+          if (type === "set_price" && p.price != null) d.price = p.price;
+          if (type === "mark_sold_out") {
+            if (name === "till") d.available = false;
+            else d.sold_out = true;
+          }
+          if (type === "mark_available") {
+            if (name === "till") d.available = true;
+            else d.sold_out = false;
+          }
+          if (type === "start_promo") {
+            if (name === "till") d.discount_pct = p.discount_pct;
+            else {
+              d.promo_en = p.text_en;
+              d.promo_fr = p.text_fr;
+              d.ends_at = p.ends_at || null;
+            }
+          }
+          return d;
+        }
+
+        function render(rv) {
+          var a = rv.action || {},
+            actor = a.actor || {},
+            pol = a.policy || {},
+            u = a.utterance || {};
+          document.title = "Yes Chef · Record " + (a._id || "");
+          document.getElementById("sub").innerHTML =
+            '<span class="mono">' +
+            esc(a._id) +
+            "</span> · " +
+            esc(a.type) +
+            (rv.item_name ? " · " + esc(rv.item_name) : "") +
+            " · " +
+            statusBadge(a.status) +
+            " · " +
+            fmtTime(a.created_at);
+          var h = "";
+          var polCls =
+            pol.decision === "allow"
+              ? "ok"
+              : pol.decision === "deny"
+                ? "no"
+                : pol.decision === "needs_approval"
+                  ? "held"
+                  : "";
+
+          h +=
+            '<section class="stage ok"><h2>1 · Who spoke</h2><div class="gate-line">' +
+            esc(rv.speaker_name || actor.human_id) +
+            ' <span class="small">(' +
+            esc(actor.role) +
+            ")</span></div>" +
+            '<div class="small mono">' +
+            esc(actor.human_id) +
+            " via " +
+            esc(actor.agent_id) +
+            " · speech: " +
+            esc(u.stt) +
+            "</div></section>";
+
+          h +=
+            '<section class="stage ok"><h2>2 · Exact words</h2><div class="words">“' +
+            highlight(u.text || "", a.evidence) +
+            "”</div></section>";
+
+          var ev = a.evidence || [];
+          h +=
+            '<section class="stage ' +
+            (ev.length ? "ok" : "") +
+            '"><h2>3 · Extracted values</h2>' +
+            (ev.length
+              ? "<table><thead><tr><th>Field</th><th>Value</th><th>Quote</th><th>Span</th></tr></thead><tbody>" +
+                ev
+                  .map(function (e) {
+                    return (
+                      "<tr><td class=mono>" +
+                      esc(e.field) +
+                      "</td><td><b>" +
+                      esc(e.value) +
+                      "</b></td><td>" +
+                      (e.quote
+                        ? "“" + esc(e.quote) + "”"
+                        : '<span class="small">no quote</span>') +
+                      '</td><td class="mono small">' +
+                      (e.span ? esc(e.span[0] + "–" + e.span[1]) : "") +
+                      "</td></tr>"
+                    );
+                  })
+                  .join("") +
+                "</tbody></table>"
+              : '<div class="small">No values.</div>') +
+            '<div class="small mono" style="margin-top:6px">params ' +
+            esc(JSON.stringify(a.params || {})) +
+            "</div></section>";
+
+          h +=
+            '<section class="stage ' +
+            polCls +
+            '"><h2>4 · Gate decision</h2><div class="gate-line">' +
+            statusBadge(pol.decision || "?") +
+            " rule <span class=mono>" +
+            esc(pol.rule_id || "none (default deny)") +
+            "</span>" +
+            (pol.version != null ? " v" + esc(pol.version) : "") +
+            "</div>" +
+            (pol.reason
+              ? '<div style="margin-top:4px">' + esc(pol.reason) + "</div>"
+              : "") +
+            (pol.approved_by
+              ? '<div style="margin-top:6px">' +
+                statusBadge("approved") +
+                " by <b>" +
+                esc(pol.approved_by) +
+                "</b> " +
+                fmtTime(pol.approved_at) +
+                "</div>"
+              : "") +
+            "</section>";
+
+          var tg = a.targets || [];
+          h +=
+            '<section class="stage ' +
+            (tg.length &&
+            tg.every(function (t) {
+              return t.status === "verified";
+            })
+              ? "ok"
+              : tg.length
+                ? "held"
+                : "") +
+            '"><h2>5 · Targets</h2>' +
+            (tg.length
+              ? "<table><thead><tr><th>Target</th><th>Previous → new</th><th>Status</th></tr></thead><tbody>" +
+                tg
+                  .map(function (t) {
+                    return (
+                      "<tr><td class=mono>" +
+                      esc(t.name) +
+                      "</td><td>" +
+                      summarize(t.name, t.previous) +
+                      '<span class="arrow">→</span><b>' +
+                      (a.type === "undo"
+                        ? "restored"
+                        : summarize(
+                            t.name,
+                            applyParams(t.name, t.previous, a.type, a.params),
+                          )) +
+                      "</b></td><td>" +
+                      statusBadge(t.status) +
+                      (t.verified_at
+                        ? '<div class="small">' +
+                          fmtTime(t.verified_at) +
+                          "</div>"
+                        : "") +
+                      "</td></tr>"
+                    );
+                  })
+                  .join("") +
+                "</tbody></table>"
+              : '<div class="small">Nothing was written.</div>') +
+            "</section>";
+
+          var au = rv.audit || [];
+          h +=
+            '<section class="stage ' +
+            (au.length ? "ok" : "") +
+            '"><h2>6 · Audit log (' +
+            au.length +
+            ")</h2>" +
+            (au.length
+              ? '<table class="mono"><thead><tr><th>Seq</th><th>Time</th><th>Event</th><th>By</th><th>Hash</th></tr></thead><tbody>' +
+                au
+                  .map(function (e) {
+                    return (
+                      "<tr><td>" +
+                      esc(e.seq) +
+                      "</td><td>" +
+                      fmtTime(e.ts) +
+                      "</td><td>" +
+                      esc(e.event) +
+                      "</td><td>" +
+                      esc((e.actor && e.actor.human_id) || "") +
+                      '</td><td title="prev ' +
+                      esc(e.prev_hash) +
+                      '">' +
+                      esc(String(e.hash || "").slice(0, 10)) +
+                      "…</td></tr>"
+                    );
+                  })
+                  .join("") +
+                "</tbody></table>"
+              : '<div class="small">No entries.</div>') +
+            "</section>";
+
+          var c = rv.chain || {};
+          h +=
+            '<section class="stage ' +
+            (c.ok ? "ok" : "no") +
+            '"><h2>7 · Chain check</h2><div class="chain ' +
+            (c.ok ? "ok" : "bad") +
+            '">' +
+            (c.ok
+              ? "✓ Hash chain intact"
+              : "✗ Chain broken at seq " + esc(c.broken_at)) +
+            ' <span class="small" style="font-weight:500">' +
+            esc(c.entries) +
+            " entries checked</span></div></section>";
+
+          document.getElementById("trace").innerHTML = h;
+        }
+
+        function load(id) {
+          currentId = id;
+          YC.api(
+            "/api/record" + (id ? "?action_id=" + encodeURIComponent(id) : ""),
+          )
+            .then(function (rv) {
+              if (!rv) {
+                document.getElementById("sub").textContent = "No action found.";
+                document.getElementById("trace").innerHTML = "";
+                return;
+              }
+              render(rv);
+              markCurrent(rv.action && rv.action._id);
+            })
+            .catch(function (e) {
+              document.getElementById("sub").innerHTML =
+                '<span class="err">Could not load record: ' +
+                esc(e.message) +
+                "</span>";
+            });
+        }
+        function markCurrent(id) {
+          document.querySelectorAll("aside a").forEach(function (x) {
+            x.classList.toggle("cur", x.getAttribute("data-id") === id);
+          });
+        }
+
+        function loadActions() {
+          YC.api("/api/actions?limit=20")
+            .then(function (rows) {
+              rows = Array.isArray(rows) ? rows : (rows && rows.actions) || [];
+              document.getElementById("actions").innerHTML = rows.length
+                ? rows
+                    .map(function (r) {
+                      var id = r._id || r.action_id,
+                        act = r.actor || {},
+                        ut = r.utterance || {};
+                      var href = YC.withMock(
+                        "/record?action_id=" + encodeURIComponent(id),
+                      );
+                      return (
+                        '<a href="' +
+                        esc(href) +
+                        '" data-id="' +
+                        esc(id) +
+                        '"><div class="t">' +
+                        esc(r.type) +
+                        " " +
+                        statusBadge(r.status || "") +
+                        '</div><div class="u">' +
+                        esc(act.human_id || "") +
+                        " · " +
+                        esc(ut.text || r.text || "") +
+                        "</div></a>"
+                      );
+                    })
+                    .join("")
+                : "No actions yet.";
+              markCurrent(currentId);
+            })
+            .catch(function (e) {
+              document.getElementById("actions").innerHTML =
+                '<span class="err">' + esc(e.message) + "</span>";
+            });
+        }
+        document
+          .getElementById("actions")
+          .addEventListener("click", function (e) {
+            var a = e.target.closest("a[data-id]");
+            if (!a) return;
+            e.preventDefault();
+            history.pushState(null, "", a.getAttribute("href"));
+            load(a.getAttribute("data-id"));
+          });
+        window.addEventListener("popstate", function () {
+          load(new URLSearchParams(location.search).get("action_id"));
+        });
+        load(currentId);
+        loadActions();
+      })();
+    </script>
+  </body>
+</html>

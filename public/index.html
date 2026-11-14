@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yes Chef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #12100e;
+        --card: #1c1916;
+        --line: #352f29;
+        --text: #f4efe7;
+        --dim: #a69d91;
+        --accent: #f2b544;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, system-ui, sans-serif;
+      }
+      .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 16px;
+      }
+      h1 {
+        font-size: 40px;
+        font-weight: 800;
+        margin: 0;
+        letter-spacing: -0.02em;
+      }
+      h1 span {
+        color: var(--accent);
+      }
+      p {
+        color: var(--dim);
+        font-size: 17px;
+        line-height: 1.5;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 10px;
+        margin-top: 24px;
+      }
+      a.card {
+        display: block;
+        text-decoration: none;
+        color: inherit;
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 14px;
+      }
+      a.card:hover {
+        border-color: var(--accent);
+      }
+      a.card b {
+        display: block;
+        font-size: 17px;
+      }
+      a.card small {
+        color: var(--dim);
+      }
+      .note {
+        font-size: 13px;
+        color: var(--dim);
+        margin-top: 24px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Yes<span>,</span> Chef</h1>
+      <p>
+        Say a change at the counter. An agent turns it into actions on the shop
+        sign, the online menu and the till, but only if the shop's rules in
+        MongoDB Atlas allow it. Every step is recorded.
+      </p>
+      <div class="grid" id="grid">
+        <a class="card" href="/stage"
+          ><b>Stage</b><small>Sign and counter side by side</small></a
+        >
+        <a class="card" href="/sign"
+          ><b>Sign</b><small>The chalkboard customers see</small></a
+        >
+        <a class="card" href="/menu"
+          ><b>Menu</b><small>Live online menu for phones</small></a
+        >
+        <a class="card" href="/counter"
+          ><b>Counter</b><small>Hold to talk (needs ?key=)</small></a
+        >
+        <a class="card" href="/approve"
+          ><b>Approve</b><small>Owner's phone (needs ?key=)</small></a
+        >
+        <a class="card" href="/record"
+          ><b>Record</b><small>Trace of one action, for review</small></a
+        >
+      </div>
+      <p class="note">
+        Sign, menu and till are mock systems written for this demo. Add
+        <code>?mock=1</code> to any page to view it with fake data.
+      </p>
+    </div>
+    <script>
+      (function () {
+        var qs = new URLSearchParams(location.search);
+        if (!qs.get("mock") && !qs.get("key")) return;
+        document.querySelectorAll("#grid a").forEach(function (a) {
+          var u = new URL(a.getAttribute("href"), location.href);
+          if (qs.get("mock")) u.searchParams.set("mock", qs.get("mock"));
+          if (qs.get("key") && /counter|stage/.test(u.pathname))
+            u.searchParams.set("key", qs.get("key"));
+          a.setAttribute("href", u.pathname + u.search);
+        });
+      })();
+    </script>
+  </body>
+</html>

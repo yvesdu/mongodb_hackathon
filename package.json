@@ -1,0 +1,22 @@
+{
+  "name": "yes-chef",
+  "private": true,
+  "type": "module",
+  "description": "Yes Chef: a voice-driven shop sign whose agent can only publish what rules stored in MongoDB Atlas allow.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "seed": "tsx --env-file=.env scripts/seed.ts",
+    "reset": "tsx --env-file=.env scripts/seed.ts --reset",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "agents": "^0.33.0",
+    "mongodb": "^7.9.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "wrangler": "^4.162.0"
+  }
+}

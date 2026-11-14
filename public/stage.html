@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yes Chef · Stage</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #0d0c0a;
+        overflow: hidden;
+      }
+      .stage {
+        display: flex;
+        height: 100vh;
+        gap: 0;
+      }
+      iframe {
+        border: 0;
+        height: 100%;
+        display: block;
+      }
+      #sign {
+        width: 62%;
+      }
+      #counter {
+        width: 38%;
+        border-left: 2px solid #2a2520;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <iframe id="sign" title="Shop sign"></iframe>
+      <iframe
+        id="counter"
+        title="Counter"
+        allow="microphone; autoplay"
+      ></iframe>
+    </div>
+    <script>
+      (function () {
+        var qs = new URLSearchParams(location.search),
+          pass = new URLSearchParams();
+        if (qs.get("mock")) pass.set("mock", qs.get("mock"));
+        var signQ = pass.toString();
+        if (qs.get("key")) pass.set("key", qs.get("key"));
+        var counterQ = pass.toString();
+        document.getElementById("sign").src =
+          "/sign" + (signQ ? "?" + signQ : "");
+        document.getElementById("counter").src =
+          "/counter" + (counterQ ? "?" + counterQ : "");
+      })();
+    </script>
+  </body>
+</html>

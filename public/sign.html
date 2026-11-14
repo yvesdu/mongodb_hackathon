@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chez Marie · Sign</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cabin+Sketch:wght@400;700&family=Kalam:wght@300;400;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --board: #1f2a24;
+        --board-2: #18211c;
+        --chalk: #f3efe4;
+        --chalk-dim: rgba(243, 239, 228, 0.62);
+        --chalk-faint: rgba(243, 239, 228, 0.28);
+        --accent: #f2b544;
+        --accent-2: #e86f4c;
+        --frame: #6b4a2f;
+        --frame-dark: #4a321f;
+        --red: #e4564a;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+      }
+      body {
+        background: var(--frame-dark);
+        color: var(--chalk);
+        font-family: "Kalam", "Segoe Print", "Bradley Hand", cursive;
+        overflow: hidden;
+      }
+      .frame {
+        position: fixed;
+        inset: 0;
+        padding: clamp(10px, 1.6vmin, 22px);
+        background:
+          linear-gradient(
+            90deg,
+            rgba(0, 0, 0, 0.18),
+            transparent 8%,
+            transparent 92%,
+            rgba(0, 0, 0, 0.18)
+          ),
+          repeating-linear-gradient(
+            90deg,
+            #6b4a2f 0 14px,
+            #63442b 14px 15px,
+            #725035 15px 31px
+          ),
+          var(--frame);
+      }
+      .board {
+        position: relative;
+        height: 100%;
+        width: 100%;
+        border-radius: 6px;
+        background:
+          radial-gradient(
+            ellipse at 30% 20%,
+            rgba(255, 255, 255, 0.07),
+            transparent 55%
+          ),
+          radial-gradient(
+            ellipse at 80% 85%,
+            rgba(255, 255, 255, 0.05),
+            transparent 50%
+          ),
+          radial-gradient(
+            ellipse at 60% 40%,
+            rgba(0, 0, 0, 0.25),
+            transparent 70%
+          ),
+          linear-gradient(160deg, var(--board), var(--board-2));
+        box-shadow:
+          inset 0 0 60px rgba(0, 0, 0, 0.55),
+          inset 0 0 4px rgba(0, 0, 0, 0.8);
+        padding: clamp(14px, 3vmin, 44px) clamp(18px, 4vmin, 64px);
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        overflow: hidden;
+      }
+      /* chalk dust smudges */
+      .board::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.5;
+        background:
+          radial-gradient(
+            circle at 12% 70%,
+            rgba(255, 255, 255, 0.05) 0 8%,
+            transparent 14%
+          ),
+          radial-gradient(
+            circle at 88% 22%,
+            rgba(255, 255, 255, 0.04) 0 6%,
+            transparent 12%
+          ),
+          radial-gradient(
+            circle at 45% 92%,
+            rgba(255, 255, 255, 0.035) 0 10%,
+            transparent 18%
+          );
+      }
+      .chalk {
+        text-shadow:
+          0 0 1px rgba(255, 255, 255, 0.55),
+          0 0 6px rgba(255, 255, 255, 0.08);
+      }
+
+      header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 2vmin;
+        border-bottom: 2px dashed var(--chalk-faint);
+        padding-bottom: 1.2vmin;
+      }
+      .brand {
+        display: flex;
+        flex-direction: column;
+      }
+      .brand h1 {
+        font-family: "Cabin Sketch", "Kalam", cursive;
+        font-weight: 700;
+        font-size: clamp(30px, 7.4vmin, 110px);
+        margin: 0;
+        line-height: 0.95;
+        letter-spacing: 0.01em;
+        color: var(--chalk);
+      }
+      .brand .tag {
+        font-size: clamp(13px, 2.2vmin, 30px);
+        color: var(--accent);
+        margin-top: 0.4vmin;
+      }
+      .brand .tag span {
+        color: var(--chalk-dim);
+      }
+      .clock {
+        font-family: "Cabin Sketch", cursive;
+        font-size: clamp(16px, 3.4vmin, 48px);
+        color: var(--chalk-dim);
+        white-space: nowrap;
+      }
+
+      main {
+        display: grid;
+        grid-template-columns: 1fr;
+        align-content: space-evenly;
+        padding: 1vmin 0;
+        min-height: 0;
+      }
+      .item {
+        position: relative;
+        display: grid;
+        grid-template-columns: 1fr auto;
+        column-gap: 3vmin;
+        align-items: baseline;
+        padding: 1.1vmin 1.4vmin;
+        border-radius: 10px;
+        transition: background 0.6s;
+      }
+      .item .names {
+        min-width: 0;
+      }
+      .item .en {
+        font-family: "Kalam", cursive;
+        font-weight: 700;
+        font-size: clamp(24px, 6.4vmin, 96px);
+        line-height: 1;
+        display: flex;
+        align-items: baseline;
+        gap: 2vmin;
+      }
+      .item .en .leader {
+        flex: 1;
+        min-width: 4vmin;
+        border-bottom: 3px dotted var(--chalk-faint);
+        transform: translateY(-1.2vmin);
+      }
+      .item .fr {
+        font-weight: 300;
+        font-style: italic;
+        font-size: clamp(14px, 3vmin, 44px);
+        color: var(--chalk-dim);
+        line-height: 1.15;
+        margin-top: 0.3vmin;
+      }
+      .item .price {
+        font-family: "Cabin Sketch", cursive;
+        font-weight: 700;
+        font-size: clamp(26px, 6.8vmin, 104px);
+        color: var(--accent);
+        line-height: 1;
+        white-space: nowrap;
+      }
+      .promo {
+        grid-column: 1 / -1;
+        display: inline-flex;
+        flex-direction: column;
+        align-self: start;
+        justify-self: start;
+        margin-top: 1vmin;
+        padding: 0.7vmin 2vmin 0.8vmin;
+        border: 3px solid var(--accent-2);
+        border-radius: 14px 4px 14px 4px;
+        transform: rotate(-1.2deg);
+        background: rgba(232, 111, 76, 0.12);
+      }
+      .promo .p-en {
+        font-weight: 700;
+        color: #ffd7c4;
+        font-size: clamp(16px, 3.6vmin, 54px);
+        line-height: 1.05;
+      }
+      .promo .p-en .until {
+        color: var(--accent);
+        font-weight: 400;
+        font-size: 0.7em;
+        margin-left: 1.2vmin;
+      }
+      .promo .p-fr {
+        font-style: italic;
+        font-weight: 300;
+        color: var(--chalk-dim);
+        font-size: clamp(12px, 2.4vmin, 36px);
+        line-height: 1.1;
+      }
+
+      .item.sold .en,
+      .item.sold .fr {
+        opacity: 0.45;
+      }
+      .item.sold .price {
+        color: var(--chalk-faint);
+        text-decoration: line-through;
+        text-decoration-thickness: 3px;
+      }
+      .item.sold .promo {
+        opacity: 0.35;
+      }
+      .stamp {
+        position: absolute;
+        left: 34%;
+        top: 50%;
+        transform: translate(-50%, -50%) rotate(-8deg);
+        border: 5px double var(--red);
+        color: var(--red);
+        padding: 0.4vmin 2.2vmin;
+        border-radius: 8px;
+        font-family: "Cabin Sketch", cursive;
+        font-weight: 700;
+        font-size: clamp(18px, 4.6vmin, 70px);
+        line-height: 1;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+        background: rgba(31, 42, 36, 0.55);
+        text-shadow: 0 0 6px rgba(228, 86, 74, 0.35);
+        pointer-events: none;
+      }
+      .stamp small {
+        font-size: 0.62em;
+        opacity: 0.9;
+      }
+
+      .item.changed {
+        animation: glow 2.6s ease-out;
+      }
+      .item.changed .price,
+      .item.changed .promo {
+        animation: pop 900ms cubic-bezier(0.2, 1.6, 0.4, 1);
+      }
+      @keyframes glow {
+        0% {
+          background: rgba(242, 181, 68, 0.34);
+          box-shadow: 0 0 0 3px rgba(242, 181, 68, 0.6);
+        }
+        100% {
+          background: transparent;
+          box-shadow: 0 0 0 0 rgba(242, 181, 68, 0);
+        }
+      }
+      @keyframes pop {
+        0% {
+          transform: scale(0.6) rotate(-4deg);
+          opacity: 0;
+        }
+        100% {
+          transform: scale(1) rotate(0);
+          opacity: 1;
+        }
+      }
+      .item.changed .promo {
+        animation-name: popPromo;
+      }
+      @keyframes popPromo {
+        0% {
+          transform: scale(0.6) rotate(-6deg);
+          opacity: 0;
+        }
+        100% {
+          transform: scale(1) rotate(-1.2deg);
+          opacity: 1;
+        }
+      }
+
+      footer {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 2vmin;
+        border-top: 2px dashed var(--chalk-faint);
+        padding-top: 1.2vmin;
+      }
+      .foot-note {
+        font-size: clamp(12px, 2vmin, 28px);
+        color: var(--chalk-dim);
+        max-width: 60%;
+      }
+      .foot-note b {
+        color: var(--chalk);
+        font-weight: 700;
+      }
+      .qr {
+        display: flex;
+        align-items: center;
+        gap: 1.6vmin;
+      }
+      .qr .code {
+        background: var(--chalk);
+        padding: 0.8vmin;
+        border-radius: 6px;
+        width: clamp(70px, 14vmin, 200px);
+        height: clamp(70px, 14vmin, 200px);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+      }
+      .qr .code svg,
+      .qr .code img {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+      .qr .cap {
+        font-family: "Cabin Sketch", cursive;
+        font-size: clamp(16px, 3vmin, 44px);
+        line-height: 1;
+      }
+      .qr .cap small {
+        display: block;
+        font-family: "Kalam", cursive;
+        font-size: 0.55em;
+        color: var(--chalk-dim);
+        margin-top: 0.5vmin;
+      }
+
+      .halted {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%) rotate(-3deg);
+        z-index: 5;
+        display: none;
+        background: rgba(24, 33, 28, 0.92);
+        border: 5px solid var(--red);
+        border-radius: 18px;
+        padding: 2vmin 5vmin;
+        text-align: center;
+        box-shadow: 0 10px 50px rgba(0, 0, 0, 0.6);
+      }
+      .halted .h-en {
+        font-family: "Cabin Sketch", cursive;
+        font-weight: 700;
+        color: var(--red);
+        font-size: clamp(26px, 7vmin, 100px);
+        line-height: 1;
+      }
+      .halted .h-fr {
+        font-style: italic;
+        color: var(--chalk-dim);
+        font-size: clamp(14px, 3vmin, 44px);
+      }
+      .halted .h-sub {
+        color: var(--chalk);
+        font-size: clamp(12px, 2.2vmin, 32px);
+        margin-top: 0.8vmin;
+      }
+      body.is-halted .halted {
+        display: block;
+      }
+      body.is-halted main {
+        filter: grayscale(0.6) brightness(0.7);
+      }
+
+      .status {
+        position: absolute;
+        top: 1vmin;
+        right: 1.4vmin;
+        font-size: 12px;
+        color: var(--chalk-faint);
+        font-family: ui-monospace, Menlo, monospace;
+      }
+      .status.offline {
+        color: var(--red);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="board">
+        <div class="status" id="status"></div>
+        <header>
+          <div class="brand chalk">
+            <h1>Chez Marie</h1>
+            <div class="tag">
+              Café &amp; boulangerie
+              <span>· today's board / l'ardoise du jour</span>
+            </div>
+          </div>
+          <div class="clock chalk" id="clock"></div>
+        </header>
+        <main id="items" aria-live="polite"></main>
+        <footer>
+          <div class="foot-note chalk">
+            Prices in CAD. <b>Updated by voice</b>, checked against the shop's
+            rules. <br />Prix en dollars canadiens.
+          </div>
+          <div class="qr">
+            <div class="cap chalk">Live menu<small>Menu en direct</small></div>
+            <div
+              class="code"
+              id="qr"
+              aria-label="QR code to the live menu"
+            ></div>
+          </div>
+        </footer>
+        <div class="halted" role="alert">
+          <div class="h-en">Paused</div>
+          <div class="h-fr">En pause</div>
+          <div class="h-sub">Changes are on hold · Ask at the counter</div>
+        </div>
+      </div>
+    </div>
+    <script src="/vendor/qrcode.js"></script>
+    <script src="/app.js"></script>
+    <script>
+      (function () {
+        var esc = YC.esc,
+          money = YC.money;
+        var prev = {};
+  var lastAll = null;
+        var itemsEl = document.getElementById("items");
+        var statusEl = document.getElementById("status");
+
+        function clock() {
+          var d = new Date();
+          document.getElementById("clock").textContent =
+            String(d.getHours()).padStart(2, "0") +
+            ":" +
+            String(d.getMinutes()).padStart(2, "0");
+        }
+        clock();
+        setInterval(clock, 10000);
+
+        // QR to /menu on this host
+        try {
+          var target = location.origin + "/menu" + (YC.MOCK ? "?mock=1" : "");
+          var qr = qrcode(0, "M");
+          qr.addData(target);
+          qr.make();
+          document.getElementById("qr").innerHTML = qr.createSvgTag({
+            cellSize: 4,
+            margin: 0,
+            scalable: true,
+          });
+          document.getElementById("qr").title = target;
+        } catch (e) {
+          console.warn("QR failed", e);
+        }
+
+        function sig(it) {
+          return [
+            it.text_en,
+            it.text_fr,
+            it.price,
+            it.sold_out,
+            it.promo_en,
+            it.promo_fr,
+            it.ends_at,
+          ].join("|");
+        }
+
+        function render(state) {
+          document.body.classList.toggle("is-halted", !!state.halted);
+          var items = state.sign || [];
+    var allSig = items.map(sig).join("~");
+    if (allSig === lastAll) return;
+    lastAll = allSig;
+          var html = items
+            .map(function (it) {
+              var promo = "";
+              if (it.promo_en || it.promo_fr) {
+                promo =
+                  '<div class="promo chalk"><div class="p-en">' +
+                  esc(it.promo_en || "") +
+                  (it.ends_at
+                    ? '<span class="until">until ' + esc(it.ends_at) + "</span>"
+                    : "") +
+                  "</div>" +
+                  (it.promo_fr
+                    ? '<div class="p-fr">' +
+                      esc(it.promo_fr) +
+                      (it.ends_at
+                        ? " · jusqu'à " + esc(it.ends_at.replace(":", " h "))
+                        : "") +
+                      "</div>"
+                    : "") +
+                  "</div>";
+              }
+              var stamp = it.sold_out
+                ? '<div class="stamp">SOLD OUT <small>/ ÉPUISÉ</small></div>'
+                : "";
+              return (
+                '<div class="item' +
+                (it.sold_out ? " sold" : "") +
+                '" data-id="' +
+                esc(it.item_id) +
+                '">' +
+                '<div class="names chalk"><div class="en">' +
+                esc(it.text_en) +
+                '<span class="leader"></span></div>' +
+                '<div class="fr">' +
+                esc(it.text_fr) +
+                "</div></div>" +
+                '<div class="price chalk">' +
+                esc(money(it.price)) +
+                "</div>" +
+                promo +
+                stamp +
+                "</div>"
+              );
+            })
+            .join("");
+          itemsEl.innerHTML = html;
+          var first = Object.keys(prev).length === 0;
+          items.forEach(function (it) {
+            var s = sig(it);
+            if (!first && prev[it.item_id] !== s) {
+              var el = itemsEl.querySelector(
+                '[data-id="' + CSS.escape(it.item_id) + '"]',
+              );
+              if (el) {
+                el.classList.add("changed");
+                setTimeout(function () {
+                  el.classList.remove("changed");
+                }, 2700);
+              }
+            }
+            prev[it.item_id] = s;
+          });
+        }
+
+        YC.connect(render, function (st) {
+          statusEl.textContent = st === "live" ? "" : st;
+          statusEl.className = "status" + (st === "offline" ? " offline" : "");
+        });
+      })();
+    </script>
+  </body>
+</html>

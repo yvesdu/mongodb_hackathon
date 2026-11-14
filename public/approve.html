@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Yes Chef · Approvals</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #12100e;
+        --card: #1c1916;
+        --line: #352f29;
+        --text: #f4efe7;
+        --dim: #a69d91;
+        --faint: #6e665c;
+        --ok: #5cc98a;
+        --no: #ef5b4f;
+        --held: #f2b544;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      .wrap {
+        max-width: 520px;
+        margin: 0 auto;
+        padding: 18px 16px 40px;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0;
+        font-weight: 800;
+      }
+      .sub {
+        color: var(--dim);
+        font-size: 14px;
+        margin: 2px 0 14px;
+      }
+      .conn {
+        font-size: 12px;
+        color: var(--faint);
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--held);
+        border-radius: 16px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      .who {
+        font-size: 13px;
+        color: var(--dim);
+      }
+      .who b {
+        color: var(--text);
+      }
+      .what {
+        font-size: 22px;
+        font-weight: 800;
+        margin: 4px 0 8px;
+      }
+      .quote {
+        font-size: 16px;
+        font-style: italic;
+        color: var(--text);
+        background: #24201c;
+        border-radius: 10px;
+        padding: 10px 12px;
+      }
+      .why {
+        font-size: 13px;
+        color: var(--held);
+        margin-top: 8px;
+      }
+      .btns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .btns button {
+        border: 0;
+        border-radius: 14px;
+        padding: 18px 10px;
+        font:
+          800 18px Inter,
+          sans-serif;
+        cursor: pointer;
+      }
+      .yes {
+        background: var(--ok);
+        color: #0d2417;
+      }
+      .no {
+        background: #3a1512;
+        color: #ffd5d0;
+        border: 2px solid var(--no) !important;
+      }
+      .btns button:disabled {
+        opacity: 0.5;
+      }
+      .empty {
+        text-align: center;
+        padding: 50px 10px;
+        color: var(--dim);
+        font-size: 18px;
+      }
+      .empty b {
+        display: block;
+        font-size: 24px;
+        color: var(--text);
+        margin-bottom: 6px;
+      }
+      .toast {
+        position: fixed;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        max-width: 488px;
+        margin: 0 auto;
+        background: var(--text);
+        color: var(--bg);
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-weight: 600;
+        display: none;
+      }
+      .toast.show {
+        display: block;
+      }
+      .halted {
+        display: none;
+        background: var(--no);
+        color: #fff;
+        border-radius: 12px;
+        padding: 10px;
+        font-weight: 700;
+        margin-bottom: 12px;
+        text-align: center;
+      }
+      body.is-halted .halted {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Approvals</h1>
+      <div class="sub">
+        Chez Marie · signed in as Marie (owner)
+        <span class="conn" id="conn"></span>
+      </div>
+      <div class="halted">
+        The shop is halted. Approved changes will not publish until it is
+        cleared.
+      </div>
+      <div id="list"></div>
+    </div>
+    <div class="toast" id="toast" role="status"></div>
+    <script src="/app.js"></script>
+    <script>
+      (function () {
+        var esc = YC.esc,
+          list = document.getElementById("list"),
+          toastT;
+        function toast(msg) {
+          var t = document.getElementById("toast");
+          t.textContent = msg;
+          t.classList.add("show");
+          clearTimeout(toastT);
+          toastT = setTimeout(function () {
+            t.classList.remove("show");
+          }, 3500);
+        }
+        function ago(iso) {
+          var s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+          if (!isFinite(s)) return "";
+          return s < 60 ? s + "s ago" : Math.round(s / 60) + " min ago";
+        }
+        function render(s) {
+          document.body.classList.toggle("is-halted", !!s.halted);
+          var p = s.pending || [];
+          if (!p.length) {
+            list.innerHTML =
+              '<div class="empty"><b>Nothing waiting</b>You will see requests here when staff ask for more than their rules allow.</div>';
+            return;
+          }
+          list.innerHTML = p
+            .map(function (a) {
+              return (
+                '<div class="card"><div class="who"><b>' +
+                esc(a.requested_by) +
+                "</b> (" +
+                esc(a.role) +
+                ") · " +
+                esc(ago(a.created_at)) +
+                '</div><div class="what">' +
+                esc(a.summary) +
+                '</div><div class="quote">“' +
+                esc(a.utterance) +
+                '”</div><div class="why">Held because: ' +
+                esc(a.reason) +
+                '</div><div class="btns">' +
+                '<button class="yes" data-id="' +
+                esc(a.action_id) +
+                '" data-approve="1">Approve</button><button class="no" data-id="' +
+                esc(a.action_id) +
+                '" data-approve="0">Reject</button></div></div>'
+              );
+            })
+            .join("");
+        }
+        list.addEventListener("click", async function (e) {
+          var b = e.target.closest("button[data-id]");
+          if (!b) return;
+          var card = b.closest(".card");
+          card.querySelectorAll("button").forEach(function (x) {
+            x.disabled = true;
+          });
+          try {
+            var r = await YC.api("/api/approve", {
+              json: {
+                action_id: b.getAttribute("data-id"),
+                approve: b.getAttribute("data-approve") === "1",
+              },
+            });
+            toast(r && r.say ? r.say : "Done.");
+          } catch (err) {
+            toast("Failed: " + err.message);
+            card.querySelectorAll("button").forEach(function (x) {
+              x.disabled = false;
+            });
+          }
+        });
+        setInterval(function () {}, 30000);
+        YC.connect(render, function (st) {
+          document.getElementById("conn").textContent =
+            st === "live" ? "" : "· " + st;
+        });
+      })();
+    </script>
+  </body>
+</html>

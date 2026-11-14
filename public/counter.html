@@ -1,0 +1,1062 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Yes Chef · Counter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #12100e;
+        --panel: #1c1916;
+        --panel-2: #24201c;
+        --line: #352f29;
+        --text: #f4efe7;
+        --dim: #a69d91;
+        --faint: #6e665c;
+        --accent: #f2b544;
+        --ok: #5cc98a;
+        --blocked: #ef5b4f;
+        --held: #f2b544;
+        --info: #7fb2e6;
+        --fail: #ef5b4f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          Inter,
+          system-ui,
+          -apple-system,
+          sans-serif;
+        font-size: 15px;
+      }
+      .wrap {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 14px 16px 40px;
+        display: grid;
+        gap: 12px;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .logo {
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        font-size: 20px;
+      }
+      .logo span {
+        color: var(--accent);
+      }
+      .conn {
+        font:
+          12px "JetBrains Mono",
+          monospace;
+        color: var(--faint);
+      }
+      .conn.live {
+        color: var(--ok);
+      }
+      .conn.offline {
+        color: var(--blocked);
+      }
+      .conn.mock {
+        color: var(--info);
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 12px 14px;
+      }
+      .panel h2 {
+        margin: 0 0 8px;
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--dim);
+        font-weight: 700;
+      }
+
+      .who {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .seg {
+        display: inline-flex;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 3px;
+      }
+      .seg button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        color: var(--dim);
+        font:
+          600 14px Inter,
+          sans-serif;
+        padding: 8px 16px;
+        border-radius: 999px;
+        cursor: pointer;
+      }
+      .seg button[aria-pressed="true"] {
+        background: var(--text);
+        color: var(--bg);
+      }
+      .seg button small {
+        font-weight: 500;
+        opacity: 0.7;
+        margin-left: 4px;
+      }
+      .seeded {
+        font-size: 12px;
+        color: var(--faint);
+      }
+
+      .talk {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 16px;
+        align-items: center;
+      }
+      .mic {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 0;
+        cursor: pointer;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        background: radial-gradient(
+          circle at 35% 30%,
+          #ffd27a,
+          var(--accent) 55%,
+          #c98a1c
+        );
+        color: #2a1d06;
+        font:
+          800 17px Inter,
+          sans-serif;
+        line-height: 1.15;
+        box-shadow:
+          0 8px 30px rgba(242, 181, 68, 0.25),
+          inset 0 -6px 0 rgba(0, 0, 0, 0.15);
+        transition: transform 0.1s;
+      }
+      .mic small {
+        display: block;
+        font-weight: 600;
+        font-size: 11px;
+        opacity: 0.7;
+        margin-top: 4px;
+      }
+      .mic.rec {
+        background: radial-gradient(
+          circle at 35% 30%,
+          #ff8a7f,
+          var(--blocked) 60%,
+          #a8302a
+        );
+        color: #fff;
+        transform: scale(1.05);
+        animation: pulse 1s infinite;
+      }
+      .mic.busy {
+        filter: grayscale(0.6) brightness(0.8);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 91, 79, 0.55);
+        }
+        50% {
+          box-shadow: 0 0 0 18px rgba(239, 91, 79, 0);
+        }
+      }
+      .talk-right {
+        display: grid;
+        gap: 8px;
+        min-width: 0;
+      }
+      .label {
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--faint);
+        font-weight: 700;
+      }
+      .heard {
+        font-size: 20px;
+        font-weight: 600;
+        min-height: 1.4em;
+      }
+      .say {
+        font-size: 22px;
+        font-weight: 700;
+        min-height: 1.4em;
+      }
+      .say.ok {
+        color: var(--ok);
+      }
+      .say.blocked {
+        color: var(--blocked);
+      }
+      .say.held {
+        color: var(--held);
+      }
+      .typed {
+        display: flex;
+        gap: 8px;
+      }
+      .typed input {
+        flex: 1;
+        min-width: 0;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 10px 12px;
+        font:
+          15px Inter,
+          sans-serif;
+      }
+      .typed button,
+      .btn {
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 10px 14px;
+        font:
+          600 14px Inter,
+          sans-serif;
+        cursor: pointer;
+      }
+      .hint {
+        font-size: 12px;
+        color: var(--faint);
+      }
+      .err {
+        color: var(--blocked);
+        font-size: 13px;
+        min-height: 1em;
+      }
+
+      .trace-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .trace-head .q {
+        color: var(--dim);
+        font-size: 13px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: stretch;
+      }
+      .step {
+        position: relative;
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--faint);
+        background: var(--panel-2);
+        border-radius: 8px;
+        padding: 6px 10px;
+        min-width: 120px;
+        max-width: 280px;
+        animation: stepIn 0.35s ease-out;
+      }
+      .step .k {
+        font:
+          600 10px "JetBrains Mono",
+          monospace;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--faint);
+      }
+      .step .l {
+        font-weight: 600;
+        font-size: 14px;
+      }
+      .step .d {
+        font-size: 12px;
+        color: var(--dim);
+        margin-top: 2px;
+      }
+      .step.ok {
+        border-left-color: var(--ok);
+      }
+      .step.ok .k {
+        color: var(--ok);
+      }
+      .step.blocked {
+        border-left-color: var(--blocked);
+        background: rgba(239, 91, 79, 0.1);
+      }
+      .step.blocked .k {
+        color: var(--blocked);
+      }
+      .step.held {
+        border-left-color: var(--held);
+        background: rgba(242, 181, 68, 0.1);
+      }
+      .step.held .k {
+        color: var(--held);
+      }
+      .step.fail {
+        border-left-color: var(--fail);
+        background: rgba(239, 91, 79, 0.1);
+      }
+      .step.fail .k {
+        color: var(--fail);
+      }
+      .step.info {
+        border-left-color: var(--info);
+      }
+      .step.info .k {
+        color: var(--info);
+      }
+      .step.working {
+        border-style: dashed;
+        color: var(--dim);
+      }
+      @keyframes stepIn {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      .empty {
+        color: var(--faint);
+        font-size: 14px;
+      }
+
+      .grid2 {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: 12px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+      }
+      td,
+      th {
+        padding: 5px 4px;
+        text-align: left;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        font-size: 11px;
+        color: var(--faint);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      td.num {
+        font-family: "JetBrains Mono", monospace;
+      }
+      .pill {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 999px;
+      }
+      .pill.ok {
+        background: rgba(92, 201, 138, 0.15);
+        color: var(--ok);
+      }
+      .pill.no {
+        background: rgba(239, 91, 79, 0.15);
+        color: var(--blocked);
+      }
+      .pill.disc {
+        background: rgba(242, 181, 68, 0.15);
+        color: var(--accent);
+      }
+      tr.flash td {
+        animation: rowflash 1.8s;
+      }
+      @keyframes rowflash {
+        from {
+          background: rgba(242, 181, 68, 0.25);
+        }
+        to {
+          background: transparent;
+        }
+      }
+      .pend {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        margin-bottom: 6px;
+        background: var(--panel-2);
+      }
+      .pend b {
+        color: var(--held);
+      }
+      .pend .u {
+        color: var(--dim);
+        font-size: 13px;
+        font-style: italic;
+      }
+      .pend .r {
+        font-size: 12px;
+        color: var(--faint);
+      }
+
+      .kill {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .kill-btn {
+        background: #3a1512;
+        border: 2px solid var(--blocked);
+        color: #ffd5d0;
+        font-weight: 800;
+        letter-spacing: 0.04em;
+        padding: 12px 18px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 15px;
+      }
+      .resume-btn {
+        background: var(--ok);
+        color: #0d2417;
+        border: 0;
+        font-weight: 800;
+        padding: 12px 18px;
+        border-radius: 12px;
+        cursor: pointer;
+        font-size: 15px;
+      }
+      .halt-banner {
+        display: none;
+        background: var(--blocked);
+        color: #fff;
+        font-weight: 800;
+        text-align: center;
+        padding: 12px;
+        border-radius: 12px;
+        font-size: 18px;
+        letter-spacing: 0.03em;
+      }
+      body.is-halted .halt-banner {
+        display: block;
+      }
+      .links {
+        font-size: 12px;
+        color: var(--faint);
+      }
+      .links a {
+        color: var(--dim);
+      }
+
+      @media (max-width: 720px) {
+        .grid2 {
+          grid-template-columns: 1fr;
+        }
+        .talk {
+          grid-template-columns: 1fr;
+          justify-items: center;
+          text-align: center;
+        }
+        .typed {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <div class="logo">
+          Yes<span>,</span> Chef
+          <span style="color: var(--faint); font-weight: 500; font-size: 14px"
+            >· counter</span
+          >
+        </div>
+        <div class="conn" id="conn">connecting</div>
+      </div>
+
+      <div class="halt-banner" role="alert">
+        HALTED · the kill switch is on. Nothing will be published.
+      </div>
+
+      <section class="panel">
+        <div class="who">
+          <div class="seg" role="group" aria-label="Speaker">
+            <button type="button" data-human="usr_marie" aria-pressed="true">
+              Marie <small>owner</small>
+            </button>
+            <button type="button" data-human="usr_sam" aria-pressed="false">
+              Sam <small>employee</small>
+            </button>
+          </div>
+          <span class="seeded">Seeded demo identities</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="talk">
+          <button class="mic" id="mic" type="button" aria-label="Hold to talk">
+            HOLD<br />TO TALK<small>or hold space</small>
+          </button>
+          <div class="talk-right">
+            <div>
+              <div class="label">Heard</div>
+              <div class="heard" id="heard">…</div>
+            </div>
+            <div>
+              <div class="label">Reply</div>
+              <div class="say" id="say">…</div>
+            </div>
+            <form class="typed" id="typed">
+              <input
+                id="typedText"
+                type="text"
+                autocomplete="off"
+                placeholder="Or type it: “we’re out of croissants”"
+                aria-label="Type a command"
+              />
+              <button type="submit">Send</button>
+            </form>
+            <div class="err" id="err"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="trace-head">
+          <h2>Live trace</h2>
+          <div class="q" id="traceq"></div>
+        </div>
+        <div class="steps" id="steps"><div class="empty">No run yet.</div></div>
+      </section>
+
+      <div class="grid2">
+        <section class="panel">
+          <h2>Till</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Discount</th>
+              </tr>
+            </thead>
+            <tbody id="till"></tbody>
+          </table>
+        </section>
+        <section class="panel">
+          <h2>Waiting for owner</h2>
+          <div id="pending"><div class="empty">Nothing waiting.</div></div>
+        </section>
+      </div>
+
+      <section class="panel kill">
+        <div>
+          <h2 style="margin: 0">Kill switch</h2>
+          <div class="hint" id="haltHint">
+            Stops publishing immediately; any run in progress is rolled back.
+          </div>
+        </div>
+        <div>
+          <button class="kill-btn" id="halt" type="button">HALT</button>
+          <button class="resume-btn" id="resume" type="button" hidden>
+            Clear halt
+          </button>
+        </div>
+      </section>
+
+      <div class="links" id="links"></div>
+    </div>
+
+    <audio id="earcon" preload="auto"></audio>
+    <audio id="voice"></audio>
+    <script src="/app.js"></script>
+    <script>
+      (function () {
+        var esc = YC.esc,
+          money = YC.money;
+        var $ = function (id) {
+          return document.getElementById(id);
+        };
+        var human = "usr_marie";
+        var state = null;
+        var busy = false;
+
+        // links
+        var k = YC.KEY ? "key=" + encodeURIComponent(YC.KEY) : "";
+        $("links").innerHTML =
+          ["/sign", "/menu", "/record"]
+            .map(function (p) {
+              return (
+                '<a href="' + YC.withMock(p) + '" target="_blank">' + p + "</a>"
+              );
+            })
+            .join(" · ") + " · approve link is the owner's";
+
+        // speaker switch
+        document.querySelectorAll(".seg button").forEach(function (b) {
+          b.addEventListener("click", function () {
+            human = b.getAttribute("data-human");
+            document.querySelectorAll(".seg button").forEach(function (x) {
+              x.setAttribute("aria-pressed", String(x === b));
+            });
+          });
+        });
+
+        // earcons: preload
+        var earconSrc = {
+          ok: "/sounds/ok.mp3",
+          blocked: "/sounds/blocked.mp3",
+          held: "/sounds/held.mp3",
+        };
+        var earconCache = {};
+        Object.keys(earconSrc).forEach(function (n) {
+          var a = new Audio(earconSrc[n]);
+          a.preload = "auto";
+          earconCache[n] = a;
+        });
+        function playEarcon(kind) {
+          return new Promise(function (resolve) {
+            var a = earconCache[kind];
+            if (!a) return resolve();
+            try {
+              a.currentTime = 0;
+            } catch (e) {}
+            var done = false;
+            function fin() {
+              if (!done) {
+                done = true;
+                resolve();
+              }
+            }
+            a.onended = fin;
+            setTimeout(fin, 900);
+            var p = a.play();
+            if (p && p.catch) p.catch(fin);
+          });
+        }
+        function classify(result) {
+          var st = (result.results || []).map(function (r) {
+            return r.status;
+          });
+          if (
+            st.some(function (s) {
+              return (
+                s === "blocked" ||
+                s === "rejected" ||
+                s === "failed" ||
+                s === "halted"
+              );
+            })
+          )
+            return "blocked";
+          if (
+            st.some(function (s) {
+              return s === "pending_approval";
+            })
+          )
+            return "held";
+          if (
+            st.some(function (s) {
+              return (
+                s === "verified" ||
+                s === "applied" ||
+                s === "allowed" ||
+                s === "explained"
+              );
+            })
+          )
+            return "ok";
+          return "held";
+        }
+
+        async function speak(text) {
+          if (!text) return;
+          if (YC.MOCK) {
+            if ("speechSynthesis" in window) {
+              var u = new SpeechSynthesisUtterance(text);
+              u.lang = "en-GB";
+              speechSynthesis.speak(u);
+            }
+            return;
+          }
+          try {
+            var r = await YC.api("/api/tts", {
+              json: { text: text },
+              raw: true,
+            });
+            if (!r.ok) throw new Error("tts " + r.status);
+            var blob = await r.blob();
+            var v = $("voice");
+            v.src = URL.createObjectURL(blob);
+            await v.play();
+          } catch (e) {
+            console.warn("TTS failed, using browser voice", e);
+            if ("speechSynthesis" in window)
+              speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+          }
+        }
+
+        async function send(text, stt) {
+          text = (text || "").trim();
+          if (!text) return;
+          $("heard").textContent = "“" + text + "”";
+          $("say").textContent = "…";
+          $("say").className = "say";
+          $("err").textContent = "";
+          busy = true;
+          $("mic").classList.add("busy");
+          try {
+            var res = await YC.api("/api/utterance", {
+              json: { human_id: human, text: text, stt: stt },
+            });
+            var kind = classify(res);
+            $("say").textContent = res.say || "";
+            $("say").className = "say " + kind;
+            // earcon first, while the reply audio is being fetched
+            if (YC.MOCK) {
+              await playEarcon(kind);
+              await speak(res.say);
+            } else {
+              var ttsP = YC.api("/api/tts", {
+                json: { text: res.say || "" },
+                raw: true,
+              })
+                .then(function (r) {
+                  return r.ok ? r.blob() : null;
+                })
+                .catch(function () {
+                  return null;
+                });
+              await playEarcon(kind);
+              var blob = await ttsP;
+              if (blob) {
+                var v = $("voice");
+                v.src = URL.createObjectURL(blob);
+                v.play().catch(function (e) {
+                  console.warn(e);
+                });
+              } else if (res.say && "speechSynthesis" in window)
+                speechSynthesis.speak(new SpeechSynthesisUtterance(res.say));
+            }
+          } catch (e) {
+            $("err").textContent = "Utterance failed: " + e.message;
+          } finally {
+            busy = false;
+            $("mic").classList.remove("busy");
+          }
+        }
+
+        // ---------- hold to talk
+        var stream = null,
+          rec = null,
+          chunks = [],
+          recording = false,
+          startedAt = 0;
+        async function startRec() {
+          if (recording || busy) return;
+          recording = true;
+          $("mic").classList.add("rec");
+          $("err").textContent = "";
+          if (YC.MOCK) {
+            startedAt = Date.now();
+            return;
+          }
+          try {
+            if (!stream)
+              stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                  noiseSuppression: true,
+                  echoCancellation: true,
+                  autoGainControl: true,
+                },
+              });
+            if (!recording) return; // released while permission prompt was up
+            chunks = [];
+            var mime = [
+              "audio/webm;codecs=opus",
+              "audio/webm",
+              "audio/mp4",
+              "audio/ogg",
+            ].filter(function (m) {
+              return (
+                window.MediaRecorder &&
+                MediaRecorder.isTypeSupported &&
+                MediaRecorder.isTypeSupported(m)
+              );
+            })[0];
+            rec = mime
+              ? new MediaRecorder(stream, { mimeType: mime })
+              : new MediaRecorder(stream);
+            rec.ondataavailable = function (e) {
+              if (e.data && e.data.size) chunks.push(e.data);
+            };
+            rec.start();
+            startedAt = Date.now();
+          } catch (e) {
+            recording = false;
+            $("mic").classList.remove("rec");
+            $("err").textContent =
+              "Microphone unavailable: " + e.message + ". Use the typed box.";
+          }
+        }
+        async function stopRec() {
+          if (!recording) return;
+          recording = false;
+          $("mic").classList.remove("rec");
+          if (YC.MOCK) {
+            $("heard").textContent = "Transcribing…";
+            var m = await YC.api("/api/stt", { body: "" });
+            return send(m.text, "elevenlabs");
+          }
+          if (!rec) return;
+          var r = rec;
+          rec = null;
+          var blob = await new Promise(function (resolve) {
+            r.onstop = function () {
+              resolve(new Blob(chunks, { type: r.mimeType || "audio/webm" }));
+            };
+            try {
+              r.stop();
+            } catch (e) {
+              resolve(null);
+            }
+          });
+          if (!blob || blob.size < 1200 || Date.now() - startedAt < 300) {
+            $("err").textContent =
+              "Too short. Hold the button while you speak.";
+            return;
+          }
+          $("heard").textContent = "Transcribing…";
+          try {
+            var out = await YC.api("/api/stt", {
+              body: blob,
+              headers: { "content-type": blob.type || "audio/webm" },
+            });
+            if (!out || !out.text) {
+              $("heard").textContent = "(heard nothing)";
+              return;
+            }
+            await send(out.text, "elevenlabs");
+          } catch (e) {
+            $("heard").textContent = "…";
+            $("err").textContent = "Speech-to-text failed: " + e.message;
+          }
+        }
+        var mic = $("mic");
+        mic.addEventListener("pointerdown", function (e) {
+          e.preventDefault();
+          try {
+            mic.setPointerCapture(e.pointerId);
+          } catch (x) {}
+          startRec();
+        });
+        mic.addEventListener("pointerup", function () {
+          stopRec();
+        });
+        mic.addEventListener("pointercancel", function () {
+          stopRec();
+        });
+        mic.addEventListener("contextmenu", function (e) {
+          e.preventDefault();
+        });
+        function typingTarget(t) {
+          return (
+            t &&
+            (t.tagName === "INPUT" ||
+              t.tagName === "TEXTAREA" ||
+              t.isContentEditable)
+          );
+        }
+        window.addEventListener("keydown", function (e) {
+          if (e.code !== "Space" || typingTarget(e.target)) return;
+          e.preventDefault();
+          if (!e.repeat) startRec();
+        });
+        window.addEventListener("keyup", function (e) {
+          if (e.code !== "Space" || typingTarget(e.target)) return;
+          e.preventDefault();
+          stopRec();
+        });
+
+        $("typed").addEventListener("submit", function (e) {
+          e.preventDefault();
+          var t = $("typedText").value;
+          $("typedText").value = "";
+          send(t, "typed");
+        });
+
+        // ---------- kill switch
+        $("halt").addEventListener("click", function () {
+          YC.api("/api/halt", { json: { halt: true } }).catch(function (e) {
+            $("err").textContent = "Halt failed: " + e.message;
+          });
+        });
+        $("resume").addEventListener("click", function () {
+          YC.api("/api/halt", { json: { halt: false } }).catch(function (e) {
+            $("err").textContent = "Clear failed: " + e.message;
+          });
+        });
+
+        // ---------- render from pushed state
+        var KEYNAME = {
+          heard: "heard",
+          extracted: "extracted",
+          planned: "planned",
+          gate: "gate",
+          target: "target",
+          verified: "verified",
+          note: "note",
+        };
+        var prevTill = {};
+        function render(s) {
+          state = s;
+          document.body.classList.toggle("is-halted", !!s.halted);
+          $("halt").hidden = !!s.halted;
+          $("resume").hidden = !s.halted;
+          $("haltHint").textContent = s.halted
+            ? "Halted. Clear it to let changes through again."
+            : "Stops publishing immediately; any run in progress is rolled back.";
+
+          var t = s.trace;
+          if (t && t.steps) {
+            $("traceq").textContent =
+              t.speaker + " (" + t.role + "): “" + t.text + "”";
+            var html = t.steps
+              .map(function (st) {
+                return (
+                  '<div class="step ' +
+                  esc(st.status) +
+                  '"><div class="k">' +
+                  esc(KEYNAME[st.key] || st.key) +
+                  " · " +
+                  esc(st.status) +
+                  '</div><div class="l">' +
+                  esc(st.label) +
+                  "</div>" +
+                  (st.detail
+                    ? '<div class="d">' + esc(st.detail) + "</div>"
+                    : "") +
+                  "</div>"
+                );
+              })
+              .join("");
+            if (!t.done)
+              html +=
+                '<div class="step working"><div class="k">working</div><div class="l">…</div></div>';
+            var stepsEl = $("steps");
+            if (
+              stepsEl.getAttribute("data-run") !== t.run_id ||
+              stepsEl.childElementCount !== t.steps.length + (t.done ? 0 : 1) ||
+              stepsEl.getAttribute("data-done") !== String(t.done)
+            ) {
+              stepsEl.innerHTML = html;
+              stepsEl.setAttribute("data-run", t.run_id);
+              stepsEl.setAttribute("data-done", String(t.done));
+            }
+          }
+
+          $("till").innerHTML = (s.till || [])
+            .map(function (r) {
+              var sig = [r.price, r.available, r.discount_pct].join("|");
+              var changed =
+                prevTill[r.item_id] !== undefined &&
+                prevTill[r.item_id] !== sig;
+              prevTill[r.item_id] = sig;
+              return (
+                '<tr class="' +
+                (changed ? "flash" : "") +
+                '"><td>' +
+                esc(YC.itemName(s, r.item_id)) +
+                '</td><td class="num">' +
+                esc(money(r.price)) +
+                "</td><td>" +
+                (r.available
+                  ? '<span class="pill ok">available</span>'
+                  : '<span class="pill no">sold out</span>') +
+                "</td><td>" +
+                (r.discount_pct
+                  ? '<span class="pill disc">' +
+                    esc(r.discount_pct) +
+                    "% off</span>"
+                  : '<span style="color:var(--faint)">none</span>') +
+                "</td></tr>"
+              );
+            })
+            .join("");
+
+          var p = s.pending || [];
+          $("pending").innerHTML = p.length
+            ? p
+                .map(function (a) {
+                  return (
+                    '<div class="pend"><b>' +
+                    esc(a.requested_by) +
+                    "</b> (" +
+                    esc(a.role) +
+                    ") asked: " +
+                    esc(a.summary) +
+                    '<div class="u">“' +
+                    esc(a.utterance) +
+                    '”</div><div class="r">Held: ' +
+                    esc(a.reason) +
+                    "</div></div>"
+                  );
+                })
+                .join("")
+            : '<div class="empty">Nothing waiting.</div>';
+        }
+
+        YC.connect(render, function (st) {
+          var c = $("conn");
+          c.textContent = st === "mock" ? "mock data" : st;
+          c.className = "conn " + st;
+        });
+      })();
+    </script>
+  </body>
+</html>
