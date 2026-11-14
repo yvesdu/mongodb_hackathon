@@ -20,9 +20,15 @@ Built on November 14, 2026 at Agents in Context Toronto, a MongoDB hackathon, fo
 | Atlas feature                  | Use                                                                                                                                                                                                               |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Collections                    | `identities`, `policies` (versioned rules), `actions`, `audit`, `control` (kill switch and chain head), and the three targets `target_sign`, `target_menu`, `target_till`                                         |
-| Schema validation              | The last gate. The database rejects a sign without French text, a sign state that traces to no action, and an action past the gate without an allow. The rejection's own explanation (`errInfo.details`) is shown |
+| Schema validation              | The last gate. The database rejects a sign without French text, a sign state that traces to no action, and an action past the gate without an allow. The rejection's own explanation (`errInfo.details`) is shown. It also enforces separation of duties: an action approved by the person who asked for it is refused |
 | Transactions                   | Each step commits the action update, its audit entries and the chain head together                                                                                                                                |
 | Change streams with pre-images | Every screen redraws because Atlas changed. An edit made directly in Atlas with no action behind it is caught, restored from the database's own before-image, and logged                                          |
+
+### What the audit record can and cannot show
+
+- An edited or deleted entry breaks the hash chain, and the check names the first broken entry.
+- Someone who controls the database could rewrite or truncate the whole chain consistently. The agent therefore keeps the chain's head (sequence number and hash) in its own storage, outside Atlas, and the check compares the two. A rewrite no longer matches.
+- Someone who controls both stores could still rewrite history. The record is tamper-evident, not tamper-proof.
 
 ## What happens to one sentence
 
