@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,700&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -21,7 +21,7 @@
         --no: #c0392b;
         --held: #a9690f;
         --serif: "Fraunces", Georgia, serif;
-        --sans: "Atkinson Hyperlegible", system-ui, sans-serif;
+        --sans: "Public Sans", system-ui, sans-serif;
       }
       * {
         box-sizing: border-box;
@@ -267,12 +267,12 @@
                 promo =
                   '<div class="promo"><div class="en"><span>' +
                   esc(it.promo_en || "") +
-                  (it.ends_at ? " until " + esc(it.ends_at) : "") +
+                  (it.ends_at && !/until/i.test(it.promo_en || "") ? " until " + esc(it.ends_at) : "") +
                   "</span></div>" +
                   (it.promo_fr
                     ? '<div class="pfr">' +
                       esc(it.promo_fr) +
-                      (it.ends_at
+                      (it.ends_at && !/jusqu/i.test(it.promo_fr || "")
                         ? " · jusqu'à " + esc(it.ends_at.replace(":", " h "))
                         : "") +
                       "</div>"
